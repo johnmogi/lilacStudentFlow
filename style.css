@@ -1,0 +1,155 @@
+/* 
+Theme Name: Hello Elementor Child PROD
+Theme URI: https://github.com/elementor/hello-theme/
+Description: Hello Elementor Child is a child theme of Hello Elementor, created by Elementor team
+Author: Elementor Team
+Author URI: https://elementor.com/
+Template: hello-elementor
+Version: 1.0.2
+Text Domain: hello-elementor-child
+License: GNU General Public License v3 or later.
+License URI: https://www.gnu.org/licenses/gpl-3.0.html
+Tags: flexible-header, custom-colors, custom-menu, custom-logo, editor-style, featured-images, rtl-language-support, threaded-comments, translation-ready
+*/
+
+/**
+ * Main stylesheet for Hello Elementor Child theme
+ * 
+ * CSS files are loaded via WordPress enqueue in functions.php
+ * - _variables.css: Theme variables and custom properties
+ * - acf-hint-highlights.css: Styles for ACF hint highlights in quizzes
+ * - quiz-layout.css: Layout styles for quiz pages
+ */
+
+/*
+ * Custom styles specific to this child theme
+ */
+
+
+ .lilac-profile-pic img {
+    float: right;
+    width: 30px;
+    margin-left: 5px;
+    height: auto;
+    max-width: 100%;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+ }
+ .lilac-profile-links {
+    max-width: 150px;
+    float: right;
+ }
+.lilac-profile-details h3{
+    font-size: 12px;
+    color: white;
+    float: right;
+    margin-left: 15px;
+}
+
+/* ===== Utility Classes ===== */
+.highlight-effect {
+    background-color: var(--color-highlight, yellow) !important;
+    font-weight: bold !important;
+    padding: 0.25rem 0.5rem !important;
+    border-radius: var(--quiz-border-radius, 3px);
+}
+
+.btn-wrapper {
+    display: flex;
+    flex-direction: row;
+    gap: var(--spacing-sm, 0.5rem);
+}
+
+.ld-logout.ld-logout.ld-login-text.ld-login-button {
+    width: auto;
+    min-width: 5vw;
+    color: var(--color-white, #fff);
+    transition: color var(--transition-base, 0.3s ease);
+}
+
+.ld-logout.ld-logout.ld-login-text.ld-login-button:hover {
+    color: var(--color-secondary, blueviolet);
+}
+
+/* ===== Quiz Layout Components ===== */
+.quiz-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-lg, 2rem);
+    position: relative;
+    margin-bottom: var(--spacing-lg, 2rem);
+}
+
+.quiz-main-content {
+    flex: 1;
+    min-width: 0; /* Prevents flex items from overflowing */
+    background: var(--quiz-question-bg, #fff);
+    border-radius: var(--quiz-border-radius, 8px);
+    padding: var(--spacing-md, 1rem);
+    box-shadow: var(--quiz-box-shadow, 0 1px 3px rgba(0,0,0,0.1));
+}
+
+.quiz-media-sidebar {
+    width: 350px;
+    background: var(--quiz-sidebar-bg, #f8f9fa);
+    border-radius: var(--quiz-border-radius, 8px);
+    padding: var(--spacing-md, 1rem);
+    box-shadow: var(--quiz-box-shadow, 0 2px 10px rgba(0,0,0,0.1));
+    position: sticky;
+    top: var(--spacing-lg, 1.5rem);
+    align-self: flex-start;
+    margin-bottom: 2rem;
+}
+
+.media-content {
+    transition: opacity 0.3s ease;
+}
+
+.media-loading {
+    text-align: center;
+    padding: 2rem;
+    color: #666;
+    font-style: italic;
+}
+
+.video-container {
+    position: relative;
+    padding-bottom: 56.25%; /* 16:9 Aspect Ratio */
+    height: 0;
+    overflow: hidden;
+    margin-bottom: 1rem;
+}
+
+.video-container iframe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border: none;
+}
+
+.rich-media-content img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 0 auto 1rem;
+}
+
+.rich-media-content p:last-child {
+    margin-bottom: 0;
+}
+
+/* Responsive adjustments */
+@media (max-width: 991px) {
+    .quiz-container {
+        flex-direction: column;
+    }
+    
+    .quiz-media-sidebar {
+        width: 100%;
+        position: static;
+        margin-top: 2rem;
+    }
+}
