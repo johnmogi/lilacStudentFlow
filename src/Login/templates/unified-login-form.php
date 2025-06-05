@@ -67,7 +67,6 @@ if (!defined('ABSPATH')) {
             if (get_option('users_can_register')) {
                 $registration_url = get_permalink(get_option('lilac_registration_page', 0)) ?: wp_registration_url();
                 echo '<a href="' . esc_url($registration_url) . '" class="register-link">';
-                echo __('הרשמה לאתר', 'hello-child');
                 echo '</a>';
             }
             ?>

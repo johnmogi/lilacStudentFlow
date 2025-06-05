@@ -29,89 +29,165 @@ function ccr_custom_add_to_cart_text() {
  */
 add_action('wp_footer', 'redirect_to_checkout_after_add_to_cart');
 function redirect_to_checkout_after_add_to_cart() {
-    if (!is_product()) return; // Only on single product pages
+    if (!is_product() && !is_cart()) return; // Only on single product and cart pages
+    
+    // Get the checkout URL
+    $checkout_url = wc_get_checkout_url();
+    
     ?>
     <script type="text/javascript">
     jQuery(document).ready(function($) {
-        // Handle both AJAX and non-AJAX add to cart
-        $(document).on('added_to_cart', function() {
-            setTimeout(function() {
-                window.location.href = '<?php echo esc_js(wc_get_checkout_url()); ?>';
-            }, 500); // Small delay to ensure cart is updated
+        // Function to redirect to checkout
+        function redirectToCheckout() {
+            window.location.href = '<?php echo esc_js($checkout_url); ?>';
+            return false;
+        }
+
+        // Handle AJAX add to cart
+        $(document.body).on('added_to_cart', function(fragments, cart_hash, $button) {
+            // Redirect for all AJAX add to cart actions
+            setTimeout(redirectToCheckout, 100);
+            return false;
         });
 
-        // Fallback for non-AJAX add to cart
+        // Handle non-AJAX add to cart form submission
         $('form.cart').on('submit', function(e) {
             var $form = $(this);
             var $button = $form.find('.single_add_to_cart_button');
             
             // Only if it's the purchase now button
-            if ($button.text().trim() === 'רכשו עכשיו') {
+            if ($button.length && $button.text().trim() === 'רכשו עכשיו') {
                 e.preventDefault();
                 
-                // Add the product to cart
+                // Submit the form via AJAX
                 $.ajax({
                     type: 'POST',
                     url: wc_add_to_cart_params.ajax_url,
-                    data: $form.serialize() + '&add-to-cart=' + $button.val(),
+                    data: $form.serialize() + '&action=woocommerce_add_to_cart',
                     success: function(response) {
-                        if (response.error && response.product_url) {
-                            window.location = response.product_url;
-                            return;
-                        }
-                        window.location.href = '<?php echo esc_js(wc_get_checkout_url()); ?>';
+                        redirectToCheckout();
                     },
                     error: function() {
-                        // If AJAX fails, let the form submit normally
+                        // If AJAX fails, submit the form normally
                         $form.off('submit').submit();
                     }
                 });
+                
+                return false;
+            }
+            return true;
+        });
+        
+        // Handle direct "Add to Cart" button clicks
+        $('.single_add_to_cart_button').on('click', function(e) {
+            var $button = $(this);
+            if ($button.text().trim() === 'רכשו עכשיו') {
+                // Let the default action happen first
+                setTimeout(redirectToCheckout, 100);
             }
         });
+        
+        // If we're on the cart page and there are items, redirect to checkout
+        if ($('body').hasClass('woocommerce-cart') && $('.woocommerce-cart-form__contents').length) {
+            setTimeout(redirectToCheckout, 300);
+        }
     });
     </script>
     <?php
 }
 
 /**
+ * Handle the redirect on add to cart
+ */
+add_filter('woocommerce_add_to_cart_redirect', function($url) {
+    // Only redirect on single product pages
+    if (is_product()) {
+        return wc_get_checkout_url();
+    }
+    return $url;
+});
+
+/**
+ * Remove duplicate product error message
+ */
+add_filter('woocommerce_add_error', function($error) {
+    if (strpos($error, 'You cannot add another') !== false) {
+        // Return an empty string to prevent the error from showing
+        return '';
+    }
+    return $error;
+});
+
+/**
+ * Clear any error notices on the cart page
+ */
+add_action('template_redirect', function() {
+    if (is_cart()) {
+        wc_clear_notices();
+        
+        // If cart is not empty, redirect to checkout
+        if (!WC()->cart->is_empty()) {
+            wp_redirect(wc_get_checkout_url());
+            exit;
+        }
+    }
+}, 99);
+
+/**
  * Enqueue scripts and styles
  */
 function hello_elementor_child_scripts_styles() {
-    // Parent theme styles
+    // Enqueue parent theme styles
     wp_enqueue_style(
         'hello-elementor-child-style',
         get_stylesheet_directory_uri() . '/style.css',
-        ['hello-elementor-theme-style'],
-        filemtime(get_stylesheet_directory() . '/style.css')
+        array('hello-elementor-theme-style'),
+        wp_get_theme()->get('Version')
     );
-    
-    // Enqueue custom scripts only if they exist
-    if (file_exists(get_stylesheet_directory() . '/assets/js/custom.js')) {
-        wp_enqueue_script(
-            'hello-elementor-child-script',
-            get_stylesheet_directory_uri() . '/assets/js/custom.js',
-            ['jquery'],
-            filemtime(get_stylesheet_directory() . '/assets/js/custom.js'),
-            true
-        );
-    }
-    
-    // Enqueue quiz answer handler on quiz pages
-    if (is_singular('sfwd-quiz')) {
-        wp_enqueue_script(
-            'quiz-answer-handler',
-            get_stylesheet_directory_uri() . '/assets/js/quiz-answer-handler.js',
-            ['jquery'],
-            filemtime(get_stylesheet_directory() . '/assets/js/quiz-answer-handler.js'),
-            true
-        );
+
+    // Enqueue WooCommerce scripts if WooCommerce is active
+    if (class_exists('WooCommerce')) {
+        wp_enqueue_script('wc-add-to-cart');
+        wp_enqueue_script('wc-cart-fragments');
         
-        // Enqueue quiz styles
+        // Ensure jQuery is loaded
+        if (!wp_script_is('jquery', 'enqueued')) {
+            wp_enqueue_script('jquery');
+        }
+    }
+
+    // Enqueue child theme scripts
+    wp_enqueue_script(
+        'hello-elementor-child-script',
+        get_stylesheet_directory_uri() . '/js/scripts.js',
+        array('jquery'),
+        wp_get_theme()->get('Version'),
+        true
+    );
+
+    // Localize script with AJAX URL
+    wp_localize_script(
+        'hello-elementor-child-script',
+        'ajax_object',
+        array('ajax_url' => admin_url('admin-ajax.php'))
+    );
+
+    // Enqueue Font Awesome
+    wp_enqueue_style(
+        'font-awesome',
+        'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css',
+        array(),
+        '6.0.0-beta3'
+    );
+
+    // Enqueue custom styles if the file exists
+    $custom_styles_path = get_stylesheet_directory() . '/css/custom-styles.css';
+    if (file_exists($custom_styles_path)) {
         wp_enqueue_style(
-            'quiz-styles',
-            get_stylesheet_directory_uri() . '/assets/css/quiz-styles.css',
-            [],
-            filemtime(get_stylesheet_directory() . '/assets/css/quiz-styles.css')
+            'custom-styles',
+            get_stylesheet_directory_uri() . '/css/custom-styles.css',
+            array(),
+            filemtime($custom_styles_path)
         );
     }
 }
@@ -364,9 +440,17 @@ function load_registration_codes_system() {
 }
 add_action('after_setup_theme', 'load_registration_codes_system', 15);
 
+// Load WooCommerce Customizations
+if (class_exists('WooCommerce')) {
+    require_once get_stylesheet_directory() . '/includes/woocommerce/class-woocommerce-customizations.php';
+}
+
 // Load Registration System
 if (file_exists(get_stylesheet_directory() . '/includes/registration/class-registration-codes.php')) {
     require_once get_stylesheet_directory() . '/includes/registration/class-registration-codes.php';
-    Registration_Codes::get_instance();
+    
+    // Initialize the registration codes system
+    if (class_exists('Lilac_Registration_Codes')) {
+        Lilac_Registration_Codes::init();
+    }
 }
-
