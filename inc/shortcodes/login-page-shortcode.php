@@ -91,15 +91,15 @@ function lilac_login_page_shortcode($atts) {
                 <div class="lilac-login-form-col">
                     <div class="lilac-registration-links-wrapper">
                         <h2><?php echo esc_html($atts['registration_title']); ?></h2>
-                        <p class="description"><?php echo esc_html($atts['registration_description']); ?></p>
+                        <!-- <p class="description"><php echo esc_html($atts['registration_description']); ?></p> -->
                         
                         <div class="registration-links">
-                            <div class="reg-link school">
-                                <a href="<?php echo esc_url($school_register_url); ?>">
+                            <!-- <div class="reg-link school">
+                                    <a href="<?php echo+ esc_url($school_register_url); ?>">
                                     הרשמה לחינוך התעבורתי
                                     <span>לתלמידי כיתה י'</span>
                                 </a>
-                            </div>
+                            </div> -->
                             <div class="reg-link private">
                                 <a href="<?php echo esc_url($private_register_url); ?>">
                                     הרשמה ללקוחות פרטיים

@@ -97,14 +97,347 @@ function redirect_to_checkout_after_add_to_cart() {
 }
 
 /**
+ * Debug function to log to wp-content/debug.log
+ */
+if (!function_exists('write_log')) {
+    function write_log($log) {
+        if (true === WP_DEBUG) {
+            if (is_array($log) || is_object($log)) {
+                error_log(print_r($log, true));
+            } else {
+                error_log($log);
+            }
+        }
+    }
+}
+
+/**
  * Handle the redirect on add to cart
  */
-add_filter('woocommerce_add_to_cart_redirect', function($url) {
-    // Only redirect on single product pages
-    if (is_product()) {
-        return wc_get_checkout_url();
+add_filter('woocommerce_add_to_cart_redirect', function($url, $product_id = null) {
+    write_log('=== woocommerce_add_to_cart_redirect triggered ===');
+    write_log('Current URL: ' . $url);
+    write_log('Product ID: ' . print_r($product_id, true));
+    write_log('Is AJAX: ' . (defined('DOING_AJAX') ? 'yes' : 'no'));
+    write_log('Session ID: ' . WC()->session->get_customer_id());
+    
+    // Only redirect on single product pages and ensure we have a valid cart
+    if ((is_product() || $product_id) && !defined('DOING_AJAX')) {
+        write_log('Inside product page condition');
+        
+        // Force the cart to persist between requests
+        if (!WC()->cart->is_empty()) {
+            write_log('Cart is not empty');
+            write_log('Cart contents: ' . print_r(WC()->cart->get_cart_contents(), true));
+            
+            // Store the cart in the session
+            WC()->session->set('cart', WC()->cart->get_cart_for_session());
+            WC()->session->set('cart_totals', WC()->cart->get_totals());
+            WC()->session->set('applied_coupons', WC()->cart->get_applied_coupons());
+            
+            // Set a session flag to indicate we want to redirect
+            WC()->session->set('redirect_to_checkout', 'yes');
+            write_log('Set redirect_to_checkout = yes');
+            
+            // Force session save
+            WC()->session->save_data();
+            write_log('Session data saved');
+            
+            // Return the cart URL to prevent WooCommerce from redirecting yet
+            $cart_url = wc_get_cart_url();
+            write_log('Redirecting to cart: ' . $cart_url);
+            return $cart_url;
+        } else {
+            write_log('Cart is empty');
+        }
+    } else {
+        write_log('Not on product page or is AJAX request');
     }
+    
+    write_log('Returning default URL: ' . $url);
     return $url;
+}, 10, 2);
+
+/**
+ * Ensure cart is loaded from session
+ */
+add_action('wp_loaded', function() {
+    if (!is_admin() && !defined('DOING_CRON') && !defined('DOING_AJAX')) {
+        write_log('=== wp_loaded action ===');
+        
+        if (WC()->session) {
+            write_log('WC Session exists');
+            
+            // Initialize the cart from session
+            WC()->cart->get_cart_from_session();
+            write_log('Cart contents after session load: ' . print_r(WC()->cart->get_cart_contents(), true));
+            
+            $redirect_flag = WC()->session->get('redirect_to_checkout');
+            write_log('Redirect flag: ' . print_r($redirect_flag, true));
+            
+            // Check if we need to redirect to checkout
+            if ($redirect_flag === 'yes' && !WC()->cart->is_empty()) {
+                write_log('Redirecting to checkout');
+                
+                // Clear the flag
+                WC()->session->set('redirect_to_checkout', 'no');
+                WC()->session->save_data();
+                
+                // Redirect to checkout
+                $checkout_url = wc_get_checkout_url();
+                write_log('Checkout URL: ' . $checkout_url);
+                
+                wp_redirect($checkout_url);
+                exit;
+            } else {
+                write_log('No redirect needed - Flag: ' . print_r($redirect_flag, true) . ', Cart empty: ' . (WC()->cart->is_empty() ? 'yes' : 'no'));
+            }
+        } else {
+            write_log('WC Session does not exist');
+        }
+    }
+}, 1);
+
+/**
+ * Add JavaScript for AJAX add to cart redirect
+ */
+add_action('wp_footer', function() {
+    if (is_product() || is_shop() || is_product_category()) {
+        $checkout_url = wc_get_checkout_url();
+        write_log('Adding JavaScript redirect handler. Checkout URL: ' . $checkout_url);
+        ?>
+        <script type="text/javascript">
+        jQuery(document).ready(function($) {
+            console.log('WooCommerce redirect script loaded');
+            
+            // Debug function
+            function logToConsole(message) {
+                console.log('WooCommerce Redirect: ' + message);
+                try {
+                    $.post('<?php echo admin_url('admin-ajax.php'); ?>', {
+                        action: 'log_to_console',
+                        message: message
+                    });
+                } catch(e) {}
+            }
+            
+            // Handle AJAX add to cart
+            $(document.body).on('added_to_cart', function(fragments, cart_hash, button) {
+                logToConsole('Product added to cart via AJAX');
+                logToConsole('Button text: ' + $(button).text());
+                
+                // Redirect to checkout after a short delay
+                setTimeout(function() {
+                    logToConsole('Redirecting to checkout: <?php echo esc_js($checkout_url); ?>');
+                    window.location.href = '<?php echo esc_js($checkout_url); ?>';
+                }, 1000);
+            });
+            
+            // Handle direct form submission (non-AJAX)
+            $('form.cart').on('submit', function(e) {
+                var $form = $(this);
+                var $button = $form.find('.single_add_to_cart_button');
+                
+                if ($button.length) {
+                    logToConsole('Form submission intercepted');
+                    e.preventDefault();
+                    
+                    $.ajax({
+                        type: 'POST',
+                        url: wc_add_to_cart_params.ajax_url,
+                        data: $form.serialize() + '&action=woocommerce_add_to_cart',
+                        success: function(response) {
+                            logToConsole('AJAX add to cart successful');
+                            window.location.href = '<?php echo esc_js($checkout_url); ?>';
+                        },
+                        error: function(xhr, status, error) {
+                            logToConsole('AJAX error: ' + error);
+                            logToConsole('Status: ' + status);
+                            logToConsole('Response: ' + xhr.responseText);
+                            // Fallback to normal form submission if AJAX fails
+                            $form.off('submit').submit();
+                        }
+                    });
+                    return false;
+                }
+                return true;
+            });
+        });
+        </script>
+        <?php
+    }
+});
+
+// Handle AJAX logging
+add_action('wp_ajax_log_to_console', 'handle_console_log');
+add_action('wp_ajax_nopriv_log_to_console', 'handle_console_log');
+function handle_console_log() {
+    if (isset($_POST['message'])) {
+        write_log('JS: ' . sanitize_text_field($_POST['message']));
+    }
+    wp_die();
+}
+
+/**
+ * Prevent cart empty redirect
+ */
+add_action('template_redirect', function() {
+    if (is_cart() && WC()->cart->is_empty() && !is_ajax()) {
+        $referer = wp_get_referer();
+        if ($referer) {
+            wp_safe_redirect($referer);
+            exit;
+        }
+    }
+});
+
+/**
+ * Customize checkout fields for school registration
+ */
+add_filter('woocommerce_checkout_fields', 'custom_override_checkout_fields');
+function custom_override_checkout_fields($fields) {
+    // Remove order comments and unnecessary fields
+    unset($fields['order']['order_comments']);
+    
+    // Student Information Section
+    $fields['billing']['billing_first_name'] = array(
+        'label'       => 'שם פרטי',
+        'placeholder' => 'שם פרטי',
+        'required'    => true,
+        'class'       => array('form-row-first'),
+        'priority'    => 10
+    );
+    
+    $fields['billing']['billing_last_name'] = array(
+        'label'       => 'שם משפחה',
+        'placeholder' => 'שם משפחה',
+        'required'    => true,
+        'class'       => array('form-row-last'),
+        'priority'    => 20
+    );
+    
+    // School Code Section
+    $fields['billing']['school_code'] = array(
+        'type'        => 'text',
+        'label'       => 'קוד בית ספר',
+        'placeholder' => 'הזן קוד בית ספר',
+        'required'    => true,
+        'class'       => array('form-row-first'),
+        'priority'    => 30,
+        'clear'       => true
+    );
+    
+    // School Info Section (will be populated via AJAX)
+    $fields['billing']['school_info'] = array(
+        'type'        => 'hidden',
+        'class'       => array('school-info-container'),
+        'priority'    => 35
+    );
+    
+    // Class Number
+    $fields['billing']['class_number'] = array(
+        'type'        => 'text',
+        'label'       => 'מספר כיתה',
+        'placeholder' => 'מספר הכיתה שלך',
+        'required'    => true,
+        'class'       => array('form-row-last'),
+        'priority'    => 40
+    );
+    
+    // Phone and ID Section
+    $fields['billing']['billing_phone'] = array(
+        'label'       => 'טלפון נייד (זיהוי משתמש)',
+        'placeholder' => 'הזן מספר טלפון נייד',
+        'required'    => true,
+        'class'       => array('form-row-first'),
+        'priority'    => 50,
+        'clear'       => true
+    );
+    
+    $fields['billing']['phone_confirm'] = array(
+        'type'        => 'text',
+        'label'       => 'וידוא טלפון נייד',
+        'placeholder' => 'הזן שוב את המספר',
+        'required'    => true,
+        'class'       => array('form-row-last'),
+        'priority'    => 60
+    );
+    
+    $fields['billing']['id_number'] = array(
+        'type'        => 'text',
+        'label'       => 'מספר ת.ז (סיסמה)',
+        'placeholder' => 'תעודת זהות',
+        'required'    => true,
+        'class'       => array('form-row-first'),
+        'priority'    => 70
+    );
+    
+    $fields['billing']['id_confirm'] = array(
+        'type'        => 'text',
+        'label'       => 'וידוא תעודת זהות',
+        'placeholder' => 'הזן שוב ת.ז',
+        'required'    => true,
+        'class'       => array('form-row-last'),
+        'priority'    => 80
+    );
+    
+    // Email field
+    $fields['billing']['billing_email'] = array(
+        'label'       => 'אימייל לאישור',
+        'placeholder' => 'אימייל לאישור הרשמה',
+        'required'    => true,
+        'class'       => array('form-row-wide'),
+        'priority'    => 90,
+        'clear'       => true
+    );
+    
+    // Promo code link
+    $fields['billing']['promo_code'] = array(
+        'type'        => 'checkbox',
+        'label'       => 'יש ברשותי קוד הטבה',
+        'class'       => array('form-row-wide'),
+        'priority'    => 100
+    );
+    
+    // Remove all address fields for virtual products
+    if (WC()->cart && !empty(WC()->cart->get_cart())) {
+        $is_virtual = true;
+        foreach (WC()->cart->get_cart() as $cart_item) {
+            if (!$cart_item['data']->is_virtual()) {
+                $is_virtual = false;
+                break;
+            }
+        }
+        
+        if ($is_virtual) {
+            unset($fields['billing']['billing_company']);
+            unset($fields['billing']['billing_country']);
+            unset($fields['billing']['billing_address_1']);
+            unset($fields['billing']['billing_address_2']);
+            unset($fields['billing']['billing_city']);
+            unset($fields['billing']['billing_state']);
+            unset($fields['billing']['billing_postcode']);
+        }
+    }
+    
+    return $fields;
+}
+
+/**
+ * Set default country to Israel and hide country field
+ */
+add_filter('default_checkout_billing_country', function() {
+    return 'IL'; // ISO code for Israel
+});
+
+/**
+ * Remove address fields from checkout
+ */
+add_filter('woocommerce_checkout_fields', function($fields) {
+    // Remove shipping fields
+    unset($fields['shipping']);
+    
+    return $fields;
 });
 
 /**
