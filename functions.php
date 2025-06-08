@@ -1118,7 +1118,7 @@ function force_checkout_redirect() {
         }
     }
 }
-
+ 
 // 3. Handle AJAX add to cart
 add_filter('woocommerce_add_to_cart_fragments', 'intercept_ajax_add_to_cart');
 function intercept_ajax_add_to_cart($fragments) {
