@@ -25,6 +25,51 @@ Tags: flexible-header, custom-colors, custom-menu, custom-logo, editor-style, fe
  * Custom styles specific to this child theme
  */
 
+/* Hide toast notifications on product pages */
+.single-product #lilac-toast-container,
+.single-product .lilac-toast,
+.single-product .lilac-toast-error {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
+/* Hide only the duplicate product error message */
+.woocommerce-notices-wrapper .woocommerce-error:has(li:contains('You cannot add another')),
+.woocommerce-notices-wrapper .woocommerce-error:has(li:contains('אין אפשרות להוסיף')),
+.woocommerce .woocommerce-error:has(li:contains('You cannot add another')),
+.woocommerce-page .woocommerce-error:has(li:contains('You cannot add another')),
+.woocommerce-notices-wrapper .woocommerce-error:has(li:contains('already in cart')),
+.woocommerce-notices-wrapper .woocommerce-error:has(li:contains('בסל הקניות')) {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    opacity: 0 !important;
+    position: absolute !important;
+    clip: rect(0, 0, 0, 0) !important;
+    overflow: hidden !important;
+    pointer-events: none !important;
+}
+
+/* Hide the view cart button in error messages */
+.woocommerce-error .button.wc-forward {
+    display: none !important;
+}
+
+.single-product .woocommerce-error {
+    background-color: #f8d7da;
+    border: 1px solid #f5c6cb;
+    color: #721c24;
+    padding: 10px 15px;
+    margin-bottom: 20px;
+    border-radius: 4px;
+    font-size: 14px;
+    display: none; /* Hide error by default, we'll handle it in JS */
+}
+
 
  .lilac-profile-pic img {
     float: right;

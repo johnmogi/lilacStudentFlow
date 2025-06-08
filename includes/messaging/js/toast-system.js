@@ -256,6 +256,15 @@ window.LilacToast = {
      * Handle AJAX errors and show them as toasts
      */
     $(document).ajaxError(function(event, jqXHR, ajaxSettings, thrownError) {
+        // Check if we should suppress toasts for this request
+        const suppressToast = jqXHR.getResponseHeader('X-Suppress-Toast') === 'true' || 
+                            (ajaxSettings.data && ajaxSettings.data.includes('suppress_toast=true'));
+        
+        if (suppressToast) {
+            console.log('Suppressing toast for AJAX error as requested');
+            return;
+        }
+        
         let message = thrownError || 'An unknown error occurred';
         let title = 'Error';
         

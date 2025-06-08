@@ -624,6 +624,6 @@ class LoginManager {
 
 // Initialize the class
 function lilac_login_manager() {
-    return LoginManager::get_instance();
+    return \Lilac\Login\LoginManager::get_instance();
 }
-lilac_login_manager();
+add_action('init', 'lilac_login_manager');

@@ -5,6 +5,66 @@
  * @package HelloElementorChild
  */
 
+// Enhanced debug logging function
+function custom_log($message, $data = null) {
+    // Use wp-content/debug-lilac.log for better accessibility
+    $log_file = WP_CONTENT_DIR . '/debug-lilac.log';
+    $timestamp = current_time('mysql');
+    $log_message = "[$timestamp] $message" . PHP_EOL;
+    
+    // Add request URI and method
+    $log_message .= "[URL] " . (isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : 'N/A') . PHP_EOL;
+    $log_message .= "[METHOD] " . (isset($_SERVER['REQUEST_METHOD']) ? $_SERVER['REQUEST_METHOD'] : 'N/A') . PHP_EOL;
+    
+    // Add POST data if this is a POST request
+    if (!empty($_POST)) {
+        $log_message .= "[POST DATA] " . print_r($_POST, true) . PHP_EOL;
+    }
+    
+    // Add GET data if this is a GET request
+    if (!empty($_GET)) {
+        $log_message .= "[GET DATA] " . print_r($_GET, true) . PHP_EOL;
+    }
+    
+    // Add any additional data
+    if ($data !== null) {
+        $log_message .= "[DATA] " . (is_array($data) || is_object($data) ? print_r($data, true) : $data) . PHP_EOL;
+    }
+    
+    // Add a separator
+    $log_message .= str_repeat('-', 80) . PHP_EOL;
+    
+    // Ensure the log directory exists and is writable
+    if (!file_exists(dirname($log_file))) {
+        @mkdir(dirname($log_file), 0755, true);
+    }
+    
+    // Write to the log file
+    @file_put_contents($log_file, $log_message, FILE_APPEND);
+    
+    // Also log to PHP error log for visibility
+    error_log('LILAC DEBUG: ' . strip_tags($message));
+}
+
+// Add debug test endpoint
+add_action('init', function() {
+    if (isset($_GET['test_debug'])) {
+        custom_log('Debug test', 'This is a test message');
+        echo 'Debug test completed. Check debug-lilac.log';
+        exit;
+    }
+});
+
+// AJAX handler for client-side debug logging
+add_action('wp_ajax_lilac_debug_log', 'lilac_handle_debug_log');
+add_action('wp_ajax_nopriv_lilac_debug_log', 'lilac_handle_debug_log');
+function lilac_handle_debug_log() {
+    if (isset($_POST['message'])) {
+        custom_log('JS Debug', sanitize_text_field($_POST['message']));
+    }
+    wp_die();
+}
+
 if (!defined('ABSPATH')) {
     exit; // Exit if accessed directly
 }
@@ -19,79 +79,358 @@ if (!defined('LILAC_QUIZ_FOLLOWUP_VERSION')) {
  */
 add_filter('woocommerce_product_single_add_to_cart_text', 'ccr_custom_add_to_cart_text');
 add_filter('woocommerce_product_add_to_cart_text', 'ccr_custom_add_to_cart_text');
-
 function ccr_custom_add_to_cart_text() {
     return 'רכשו עכשיו';
 }
 
 /**
- * Redirect to checkout after adding a product to cart
+ * Debug function to log to wp-content/debug.log
  */
-add_action('wp_footer', 'redirect_to_checkout_after_add_to_cart');
-function redirect_to_checkout_after_add_to_cart() {
-    if (!is_product() && !is_cart()) return; // Only on single product and cart pages
+if (!function_exists('write_log')) {
+    function write_log($log) {
+        if (true === WP_DEBUG) {
+            if (is_array($log) || is_object($log)) {
+                error_log(print_r($log, true));
+            } else {
+                error_log($log);
+            }
+        }
+    }
+}
+
+/**
+ * Log WooCommerce add to cart actions
+ */
+add_action('woocommerce_add_to_cart', 'log_add_to_cart_action', 10, 6);
+function log_add_to_cart_action($cart_item_key, $product_id, $quantity, $variation_id, $variation, $cart_item_data) {
+    write_log('=== ADD TO CART ACTION TRIGGERED ===');
+    write_log('Product ID: ' . $product_id);
+    write_log('Variation ID: ' . $variation_id);
+    write_log('Quantity: ' . $quantity);
+    write_log('Cart Item Data: ' . print_r($cart_item_data, true));
+    write_log('$_REQUEST: ' . print_r($_REQUEST, true));
+    write_log('$_POST: ' . print_r($_POST, true));
+}
+
+/**
+ * Handle all add to cart redirects to checkout
+ */
+add_filter('woocommerce_add_to_cart_redirect', 'custom_add_to_cart_redirect', 99, 1);
+function custom_add_to_cart_redirect($url) {
+    // Log the start of the redirection process
+    custom_log('=== START ADD TO CART REDIRECT ===');
+    custom_log('Original URL', $url);
     
-    // Get the checkout URL
+    // Log request data
+    custom_log('Request Data', [
+        'is_ajax' => wp_doing_ajax(),
+        'is_cart' => is_cart(),
+        'is_checkout' => is_checkout(),
+        'is_product' => is_product(),
+        'request' => $_REQUEST
+    ]);
+    
+    // Don't redirect if this is an AJAX request - let the JS handle it
+    if (wp_doing_ajax()) {
+        custom_log('AJAX request detected, letting JS handle redirection');
+        return $url;
+    }
+    
+    // Check if this is an add to cart action
+    $is_add_to_cart = (
+        (isset($_REQUEST['add-to-cart']) && is_numeric($_REQUEST['add-to-cart'])) ||
+        (isset($_REQUEST['add-to-cart-nonce']) && wp_verify_nonce($_REQUEST['add-to-cart-nonce'], 'add-to-cart')) ||
+        (isset($_REQUEST['add-to-cart-variation']) && is_numeric($_REQUEST['add-to-cart-variation']))
+    );
+    
+    if ($is_add_to_cart) {
+        custom_log('Add to cart action detected');
+        
+        // Get the product ID
+        $product_id = 0;
+        $variation_id = 0;
+        
+        if (isset($_REQUEST['add-to-cart']) && is_numeric($_REQUEST['add-to-cart'])) {
+            $product_id = absint($_REQUEST['add-to-cart']);
+            custom_log('Simple product detected', ['product_id' => $product_id]);
+        } 
+        
+        if (isset($_REQUEST['add-to-cart-variation']) && is_numeric($_REQUEST['add-to-cart-variation'])) {
+            $variation_id = absint($_REQUEST['add-to-cart-variation']);
+            $product_id = $variation_id; // For variations, use variation ID as product ID
+            custom_log('Variable product detected', [
+                'variation_id' => $variation_id,
+                'variation' => isset($_REQUEST['variation_id']) ? $_REQUEST['variation_id'] : 'N/A'
+            ]);
+        }
+        
+        if ($product_id > 0) {
+            // Clear any notices to prevent duplicate messages
+            wc_clear_notices();
+            
+            // Get the checkout URL
+            $checkout_url = wc_get_checkout_url();
+            $redirect_url = add_query_arg('added-to-cart', $product_id, $checkout_url);
+            
+            custom_log('Redirecting to checkout', [
+                'product_id' => $product_id,
+                'variation_id' => $variation_id,
+                'redirect_url' => $redirect_url
+            ]);
+            
+            return $redirect_url;
+        }
+    }
+    
+    custom_log('No redirect needed, returning original URL');
+    return $url;
+}
+
+/**
+ * Handle AJAX add to cart redirects and variable product forms
+ */
+add_action('wp_footer', 'custom_add_to_cart_script');
+function custom_add_to_cart_script() {
+    // Only load on relevant pages
+    if (!is_woocommerce() && !is_cart() && !is_checkout() && !is_product()) return;
+    
     $checkout_url = wc_get_checkout_url();
-    
+    $is_ajax = wp_doing_ajax();
     ?>
     <script type="text/javascript">
-    jQuery(document).ready(function($) {
-        // Function to redirect to checkout
-        function redirectToCheckout() {
-            window.location.href = '<?php echo esc_js($checkout_url); ?>';
-            return false;
-        }
-
-        // Handle AJAX add to cart
-        $(document.body).on('added_to_cart', function(fragments, cart_hash, $button) {
-            // Redirect for all AJAX add to cart actions
-            setTimeout(redirectToCheckout, 100);
-            return false;
-        });
-
-        // Handle non-AJAX add to cart form submission
-        $('form.cart').on('submit', function(e) {
-            var $form = $(this);
-            var $button = $form.find('.single_add_to_cart_button');
+    (function($) {
+        'use strict';
+        
+        // Enhanced debug function
+        function debugLog() {
+            if (!window.console || !window.console.log) return;
             
-            // Only if it's the purchase now button
-            if ($button.length && $button.text().trim() === 'רכשו עכשיו') {
-                e.preventDefault();
-                
-                // Submit the form via AJAX
+            var args = Array.prototype.slice.call(arguments);
+            var timestamp = new Date().toISOString();
+            
+            // Add timestamp and prefix to all log messages
+            args.unshift('[Lilac Debug ' + timestamp + ']');
+            
+            // Log to console
+            console.log.apply(console, args);
+            
+            // Also log to a global array for debugging
+            if (!window.lilacDebugLog) {
+                window.lilacDebugLog = [];
+            }
+            window.lilacDebugLog.push({
+                time: timestamp,
+                message: args.join(' ')
+            });
+            
+            // Send log to server for persistent logging
+            try {
                 $.ajax({
+                    url: '<?php echo admin_url('admin-ajax.php'); ?>',
                     type: 'POST',
-                    url: wc_add_to_cart_params.ajax_url,
-                    data: $form.serialize() + '&action=woocommerce_add_to_cart',
-                    success: function(response) {
-                        redirectToCheckout();
-                    },
-                    error: function() {
-                        // If AJAX fails, submit the form normally
-                        $form.off('submit').submit();
+                    data: {
+                        action: 'lilac_debug_log',
+                        message: args.join(' ')
                     }
                 });
-                
-                return false;
+            } catch (e) {
+                console.error('Failed to send debug log:', e);
             }
-            return true;
-        });
-        
-        // Handle direct "Add to Cart" button clicks
-        $('.single_add_to_cart_button').on('click', function(e) {
-            var $button = $(this);
-            if ($button.text().trim() === 'רכשו עכשיו') {
-                // Let the default action happen first
-                setTimeout(redirectToCheckout, 100);
-            }
-        });
-        
-        // If we're on the cart page and there are items, redirect to checkout
-        if ($('body').hasClass('woocommerce-cart') && $('.woocommerce-cart-form__contents').length) {
-            setTimeout(redirectToCheckout, 300);
         }
-    });
+        
+        // Function to redirect to checkout
+        function redirectToCheckout() {
+            var checkoutUrl = '<?php echo esc_js($checkout_url); ?>';
+            debugLog('Redirecting to checkout:', checkoutUrl);
+            
+            // Add a small random parameter to prevent caching
+            var timestamp = new Date().getTime();
+            var separator = checkoutUrl.includes('?') ? '&' : '?';
+            window.location.href = checkoutUrl + separator + 'nocache=' + timestamp;
+            
+            // If we're still here after 1 second, force redirect
+            setTimeout(function() {
+                debugLog('Force redirecting to checkout after delay');
+                window.location.href = checkoutUrl;
+            }, 1000);
+            
+            return false;
+        }
+        
+        // Handle AJAX add to cart
+        function handleAddedToCart(event, fragments, hash, $button) {
+            debugLog('=== ADDED TO CART EVENT ===');
+            debugLog('Event:', event);
+            debugLog('Fragments:', fragments);
+            debugLog('Hash:', hash);
+            debugLog('Button:', $button ? $button.attr('class') : 'No button');
+            
+            // Get the product ID from the button if available
+            var productId = $button ? $button.data('product_id') || $button.closest('[data-product_id]').data('product_id') : 'unknown';
+            debugLog('Product ID from button:', productId);
+            
+            // Check if this is a variation product
+            var isVariation = $button && $button.closest('.variations_form').length > 0;
+            var delay = isVariation ? 1500 : 800; // Longer delay for variations
+            
+            debugLog('Is variation:', isVariation, 'Using delay:', delay + 'ms');
+            
+            // Clear any existing timeouts
+            if (window.addToCartTimeout) {
+                clearTimeout(window.addToCartTimeout);
+            }
+            
+            // Set a new timeout
+            window.addToCartTimeout = setTimeout(function() {
+                debugLog('Executing redirect after delay');
+                redirectToCheckout();
+            }, delay);
+        }
+        
+        // Document ready
+        $(function() {
+            debugLog('Document ready');
+            
+            // Handle AJAX add to cart events
+            $(document.body).on('added_to_cart', handleAddedToCart);
+            
+            // Handle variable product form submission
+            $('form.variations_form').on('submit', function(e) {
+                debugLog('Variable product form submission');
+                var $form = $(this);
+                var $button = $form.find('.single_add_to_cart_button');
+                
+                // Update button text and disable
+                $button.text('מועבר לתשלום...').prop('disabled', true);
+                
+                // For AJAX add to cart
+                if ($form.hasClass('variations_form')) {
+                    debugLog('Variable product form detected');
+                    return true; // Let the form submit normally
+                }
+                
+                return true;
+            });
+            
+            // Handle variation selection
+            $('form.variations_form').on('found_variation', function(event, variation) {
+                debugLog('Variation selected: ' + JSON.stringify(variation));
+                $(this).find('.single_add_to_cart_button').text('רכשו עכשיו');
+            });
+            
+            // Handle direct add to cart buttons (simple products)
+            $(document).on('click', '.add_to_cart_button:not(.product_type_variable)', function(e) {
+                debugLog('Add to cart button clicked');
+                var $button = $(this);
+                
+                // Only proceed if not already processing
+                if ($button.is('.processing, .disabled, :disabled, [disabled=disabled]')) {
+                    return false;
+                }
+                
+                // Mark as processing
+                $button.addClass('processing').text('מועבר לתשלום...');
+                
+                // If this is an AJAX add to cart
+                if (typeof wc_add_to_cart_params !== 'undefined' && $button.is('.ajax_add_to_cart')) {
+                    return true; // Let WooCommerce handle the AJAX request
+                }
+                
+                return true;
+            });
+            
+            // Redirect if on cart page with items
+            if ($('body').hasClass('woocommerce-cart') && $('.woocommerce-cart-form__contents').length) {
+                debugLog('On cart page, redirecting to checkout');
+                setTimeout(redirectToCheckout, 500);
+            }
+            
+            // Debug AJAX requests
+            $(document).ajaxComplete(function(event, xhr, settings) {
+                if (settings.url && settings.url.includes('wc-ajax=add_to_cart')) {
+                    debugLog('AJAX add to cart completed');
+                    debugLog('URL: ' + settings.url);
+                    debugLog('Status: ' + xhr.status);
+                    
+                    try {
+                        var response = JSON.parse(xhr.responseText);
+                        debugLog('Response: ' + JSON.stringify(response));
+                    } catch (e) {
+                        debugLog('Could not parse response as JSON');
+                    }
+                }
+            });
+            
+            // Enhanced form submission handler for all add to cart forms
+            $(document).on('submit', 'form.cart:not(.grouped_form)', function(e) {
+                debugLog('=== FORM SUBMIT TRIGGERED ===');
+                var $form = $(this);
+                var $button = $form.find('.single_add_to_cart_button');
+                var isAjax = $form.attr('enctype') === 'multipart/form-data' || 
+                             $form.hasClass('variations_form') || 
+                             $form.find('input[name="add-to-cart"]').length > 0;
+                
+                debugLog('Form data:', $form.serialize());
+                debugLog('Is AJAX submission:', isAjax);
+                
+                // Always prevent default for our custom handling
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                
+                // Disable the button to prevent multiple clicks
+                $button.prop('disabled', true).addClass('loading');
+                
+                if (isAjax) {
+                    debugLog('Processing as AJAX submission');
+                    
+                    // For variable products, we need to wait for variation data to be set
+                    if ($form.hasClass('variations_form')) {
+                        debugLog('Variable product form detected');
+                        // Trigger variation selection if not already done
+                        if (typeof $form.data('product_variations') === 'undefined') {
+                            $form.find('.variations select').trigger('change');
+                        }
+                    }
+                    
+                    // Submit via AJAX
+                    $.ajax({
+                        url: wc_add_to_cart_params.ajax_url,
+                        type: 'POST',
+                        data: $form.serialize() + '&action=woocommerce_add_to_cart',
+                        dataType: 'json',
+                        success: function(response) {
+                            debugLog('AJAX add to cart success:', response);
+                            if (response.error && response.product_url) {
+                                window.location = response.product_url;
+                                return;
+                            }
+                            // Redirect to checkout after successful add to cart
+                            redirectToCheckout();
+                        },
+                        error: function(xhr, status, error) {
+                            var errorMsg = 'שגיאה בהוספת המוצר לעגלה. אנא נסה שוב.';
+                            try {
+                                var response = JSON.parse(xhr.responseText);
+                                if (response.error_message) {
+                                    errorMsg = response.error_message;
+                                }
+                                debugLog('AJAX add to cart error:', response);
+                            } catch (e) {
+                                debugLog('Error parsing error response:', e);
+                            }
+                            alert(errorMsg);
+                            $button.prop('disabled', false).removeClass('loading');
+                        }
+                    });
+                } else {
+                    debugLog('Processing as standard form submission');
+                    // For non-AJAX forms, submit normally
+                    this.submit();
+                }
+            });
+        });
+        
+    })(jQuery);
     </script>
     <?php
 }
@@ -111,161 +450,18 @@ if (!function_exists('write_log')) {
     }
 }
 
-/**
- * Handle the redirect on add to cart
- */
-add_filter('woocommerce_add_to_cart_redirect', function($url, $product_id = null) {
-    write_log('=== woocommerce_add_to_cart_redirect triggered ===');
-    write_log('Current URL: ' . $url);
-    write_log('Product ID: ' . print_r($product_id, true));
-    write_log('Is AJAX: ' . (defined('DOING_AJAX') ? 'yes' : 'no'));
-    write_log('Session ID: ' . WC()->session->get_customer_id());
-    
-    // Only redirect on single product pages and ensure we have a valid cart
-    if ((is_product() || $product_id) && !defined('DOING_AJAX')) {
-        write_log('Inside product page condition');
-        
-        // Force the cart to persist between requests
-        if (!WC()->cart->is_empty()) {
-            write_log('Cart is not empty');
-            write_log('Cart contents: ' . print_r(WC()->cart->get_cart_contents(), true));
-            
-            // Store the cart in the session
-            WC()->session->set('cart', WC()->cart->get_cart_for_session());
-            WC()->session->set('cart_totals', WC()->cart->get_totals());
-            WC()->session->set('applied_coupons', WC()->cart->get_applied_coupons());
-            
-            // Set a session flag to indicate we want to redirect
-            WC()->session->set('redirect_to_checkout', 'yes');
-            write_log('Set redirect_to_checkout = yes');
-            
-            // Force session save
-            WC()->session->save_data();
-            write_log('Session data saved');
-            
-            // Return the cart URL to prevent WooCommerce from redirecting yet
-            $cart_url = wc_get_cart_url();
-            write_log('Redirecting to cart: ' . $cart_url);
-            return $cart_url;
-        } else {
-            write_log('Cart is empty');
-        }
-    } else {
-        write_log('Not on product page or is AJAX request');
-    }
-    
-    write_log('Returning default URL: ' . $url);
-    return $url;
-}, 10, 2);
+// Remove any other conflicting redirects
+remove_action('template_redirect', 'wc_redirect_to_checkout');
+remove_action('template_redirect', 'wc_cart_redirect_after_error');
 
-/**
- * Ensure cart is loaded from session
- */
+// Ensure WooCommerce session is started
 add_action('wp_loaded', function() {
     if (!is_admin() && !defined('DOING_CRON') && !defined('DOING_AJAX')) {
-        write_log('=== wp_loaded action ===');
-        
-        if (WC()->session) {
-            write_log('WC Session exists');
-            
-            // Initialize the cart from session
-            WC()->cart->get_cart_from_session();
-            write_log('Cart contents after session load: ' . print_r(WC()->cart->get_cart_contents(), true));
-            
-            $redirect_flag = WC()->session->get('redirect_to_checkout');
-            write_log('Redirect flag: ' . print_r($redirect_flag, true));
-            
-            // Check if we need to redirect to checkout
-            if ($redirect_flag === 'yes' && !WC()->cart->is_empty()) {
-                write_log('Redirecting to checkout');
-                
-                // Clear the flag
-                WC()->session->set('redirect_to_checkout', 'no');
-                WC()->session->save_data();
-                
-                // Redirect to checkout
-                $checkout_url = wc_get_checkout_url();
-                write_log('Checkout URL: ' . $checkout_url);
-                
-                wp_redirect($checkout_url);
-                exit;
-            } else {
-                write_log('No redirect needed - Flag: ' . print_r($redirect_flag, true) . ', Cart empty: ' . (WC()->cart->is_empty() ? 'yes' : 'no'));
-            }
-        } else {
-            write_log('WC Session does not exist');
+        if (function_exists('WC') && !WC()->session->has_session()) {
+            WC()->session->set_customer_session_cookie(true);
         }
     }
-}, 1);
-
-/**
- * Add JavaScript for AJAX add to cart redirect
- */
-add_action('wp_footer', function() {
-    if (is_product() || is_shop() || is_product_category()) {
-        $checkout_url = wc_get_checkout_url();
-        write_log('Adding JavaScript redirect handler. Checkout URL: ' . $checkout_url);
-        ?>
-        <script type="text/javascript">
-        jQuery(document).ready(function($) {
-            console.log('WooCommerce redirect script loaded');
-            
-            // Debug function
-            function logToConsole(message) {
-                console.log('WooCommerce Redirect: ' + message);
-                try {
-                    $.post('<?php echo admin_url('admin-ajax.php'); ?>', {
-                        action: 'log_to_console',
-                        message: message
-                    });
-                } catch(e) {}
-            }
-            
-            // Handle AJAX add to cart
-            $(document.body).on('added_to_cart', function(fragments, cart_hash, button) {
-                logToConsole('Product added to cart via AJAX');
-                logToConsole('Button text: ' + $(button).text());
-                
-                // Redirect to checkout after a short delay
-                setTimeout(function() {
-                    logToConsole('Redirecting to checkout: <?php echo esc_js($checkout_url); ?>');
-                    window.location.href = '<?php echo esc_js($checkout_url); ?>';
-                }, 1000);
-            });
-            
-            // Handle direct form submission (non-AJAX)
-            $('form.cart').on('submit', function(e) {
-                var $form = $(this);
-                var $button = $form.find('.single_add_to_cart_button');
-                
-                if ($button.length) {
-                    logToConsole('Form submission intercepted');
-                    e.preventDefault();
-                    
-                    $.ajax({
-                        type: 'POST',
-                        url: wc_add_to_cart_params.ajax_url,
-                        data: $form.serialize() + '&action=woocommerce_add_to_cart',
-                        success: function(response) {
-                            logToConsole('AJAX add to cart successful');
-                            window.location.href = '<?php echo esc_js($checkout_url); ?>';
-                        },
-                        error: function(xhr, status, error) {
-                            logToConsole('AJAX error: ' + error);
-                            logToConsole('Status: ' + status);
-                            logToConsole('Response: ' + xhr.responseText);
-                            // Fallback to normal form submission if AJAX fails
-                            $form.off('submit').submit();
-                        }
-                    });
-                    return false;
-                }
-                return true;
-            });
-        });
-        </script>
-        <?php
-    }
+});
 });
 
 // Handle AJAX logging
@@ -478,10 +674,87 @@ function hello_elementor_child_scripts_styles() {
         wp_get_theme()->get('Version')
     );
 
-    // Enqueue WooCommerce scripts if WooCommerce is active
+    // Enqueue WooCommerce scripts and styles if WooCommerce is active
     if (class_exists('WooCommerce')) {
-        wp_enqueue_script('wc-add-to-cart');
-        wp_enqueue_script('wc-cart-fragments');
+        // Enqueue WooCommerce scripts
+        if (is_product() || is_cart() || is_checkout()) {
+            wp_enqueue_script('wc-add-to-cart');
+            wp_enqueue_script('wc-cart-fragments');
+            
+            // Localize the script with the AJAX URL and other parameters
+            wp_localize_script('wc-add-to-cart', 'wc_add_to_cart_params', array(
+                'ajax_url' => WC()->ajax_url(),
+                'wc_ajax_url' => WC_AJAX::get_endpoint("%%endpoint%%"),
+                'i18n_view_cart' => __('View cart', 'woocommerce'),
+                'cart_url' => wc_get_cart_url(),
+                'is_cart' => is_cart(),
+                'cart_redirect_after_add' => get_option('woocommerce_cart_redirect_after_add')
+            ));
+        }
+    }
+    
+    // Enqueue custom scripts only if they exist
+    if (is_product() || is_shop() || is_product_category()) {
+        // Enqueue debug script
+        wp_enqueue_script(
+            'lilac-debug',
+            get_stylesheet_directory_uri() . '/js/debug-test.js',
+            array('jquery'),
+            filemtime(get_stylesheet_directory() . '/js/debug-test.js'),
+            true
+        );
+        
+        // Enqueue add to cart script
+        wp_enqueue_script(
+            'lilac-add-to-cart',
+            get_stylesheet_directory_uri() . '/js/add-to-cart.js',
+            array('jquery', 'wc-add-to-cart', 'wc-cart-fragments'),
+            filemtime(get_stylesheet_directory() . '/js/add-to-cart.js'),
+            true
+        );
+        
+        // Localize script with necessary data
+        $lilac_vars = array(
+            'ajax_url' => admin_url('admin-ajax.php'),
+            'checkout_url' => wc_get_checkout_url(),
+            'is_product' => is_product() ? 'yes' : 'no',
+            'is_shop' => is_shop() ? 'yes' : 'no',
+            'is_product_category' => is_product_category() ? 'yes' : 'no',
+            'home_url' => home_url('/'),
+            'wc_ajax_url' => WC_AJAX::get_endpoint('%%endpoint%%')
+        );
+        
+        wp_localize_script('lilac-add-to-cart', 'lilac_vars', $lilac_vars);
+        
+        // Also make sure WooCommerce scripts have the right data
+        wp_localize_script('wc-add-to-cart', 'wc_add_to_cart_params', array(
+            'ajax_url' => WC()->ajax_url(),
+            'wc_ajax_url' => WC_AJAX::get_endpoint('%%endpoint%%'),
+            'i18n_view_cart' => __('View cart', 'woocommerce'),
+            'cart_url' => wc_get_cart_url(),
+            'is_cart' => is_cart() ? '1' : '0',
+            'cart_redirect_after_add' => 'no'
+        ));
+    }
+    if (file_exists(get_stylesheet_directory() . '/assets/js/custom.js')) {
+        wp_enqueue_script(
+            'hello-elementor-child-script',
+            get_stylesheet_directory_uri() . '/assets/js/custom.js',
+            ['jquery'],
+            filemtime(get_stylesheet_directory() . '/assets/js/custom.js'),
+            true
+        );
+    }
+    
+    // Enqueue quiz answer handler on quiz pages
+    if (is_singular('sfwd-quiz')) {
+        wp_enqueue_script(
+            'quiz-answer-handler',
+            get_stylesheet_directory_uri() . '/assets/js/quiz-answer-handler.js',
+            ['jquery'],
+            filemtime(get_stylesheet_directory() . '/assets/js/quiz-answer-handler.js'),
+            true
+        );
         
         // Ensure jQuery is loaded
         if (!wp_script_is('jquery', 'enqueued')) {
@@ -699,12 +972,48 @@ function lilac_add_toast_debug_code() {
 // Load Login System
 function ccr_load_login_system() {
     if (!is_admin()) {
-        require_once get_stylesheet_directory() . '/src/Login/LoginManager.php';
-        require_once get_stylesheet_directory() . '/src/Login/Captcha.php';
-        require_once get_stylesheet_directory() . '/src/Login/UserAccountWidget.php';
+        error_log('Loading LoginManager...');
+        
+        $login_manager_path = get_stylesheet_directory() . '/src/Login/LoginManager.php';
+        
+        if (file_exists($login_manager_path)) {
+            error_log('LoginManager.php found, including file...');
+            require_once $login_manager_path;
+            
+            // Check if the class exists and can be loaded
+            if (class_exists('Lilac\Login\LoginManager')) {
+                error_log('LoginManager class exists, getting instance...');
+                $instance = Lilac\Login\LoginManager::get_instance();
+                error_log('LoginManager instance: ' . get_class($instance));
+            } else {
+                error_log('ERROR: Lilac\Login\LoginManager class not found!');
+            }
+        } else {
+            error_log('ERROR: LoginManager.php not found at: ' . $login_manager_path);
+        }
+        
+        // Load other required files
+        $captcha_path = get_stylesheet_directory() . '/src/Login/Captcha.php';
+        if (file_exists($captcha_path)) {
+            require_once $captcha_path;
+        }
+        
+        $widget_path = get_stylesheet_directory() . '/src/Login/UserAccountWidget.php';
+        if (file_exists($widget_path)) {
+            require_once $widget_path;
+        }
+    } else {
+        error_log('Skipping login system load in admin');
     }
 }
 add_action('after_setup_theme', 'ccr_load_login_system', 10);
+
+// Debug function to check registered shortcodes
+function debug_registered_shortcodes() {
+    global $shortcode_tags;
+    error_log('Registered Shortcodes: ' . print_r(array_keys($shortcode_tags), true));
+}
+add_action('init', 'debug_registered_shortcodes', 999);
 
 // Add body class for quiz types
 add_filter('body_class', function($classes) {
@@ -777,13 +1086,125 @@ add_action('after_setup_theme', 'load_registration_codes_system', 15);
 if (class_exists('WooCommerce')) {
     require_once get_stylesheet_directory() . '/includes/woocommerce/class-woocommerce-customizations.php';
 }
+}
 
-// Load Registration System
-if (file_exists(get_stylesheet_directory() . '/includes/registration/class-registration-codes.php')) {
-    require_once get_stylesheet_directory() . '/includes/registration/class-registration-codes.php';
-    
-    // Initialize the registration codes system
-    if (class_exists('Lilac_Registration_Codes')) {
-        Lilac_Registration_Codes::init();
+<?php
+// Exit if accessed directly
+if (!defined('ABSPATH')) {
+    exit;
+}
+
+// ============================================
+// WooCommerce Checkout Redirect Functionality
+// ============================================
+
+
+// 1. Change Add to Cart button text
+add_filter('woocommerce_product_single_add_to_cart_text', 'custom_add_to_cart_text');
+add_filter('woocommerce_product_add_to_cart_text', 'custom_add_to_cart_text');
+function custom_add_to_cart_text() {
+    return 'רכשו עכשיו';
+}
+
+// 2. Force redirect to checkout on any add-to-cart action
+add_action('template_redirect', 'force_checkout_redirect');
+function force_checkout_redirect() {
+    // Only proceed if we're on the cart page or processing add to cart
+    if (is_cart() || (isset($_REQUEST['add-to-cart']) && is_numeric($_REQUEST['add-to-cart']))) {
+        // If cart is not empty, redirect to checkout
+        if (!WC()->cart->is_empty()) {
+            wp_redirect(wc_get_checkout_url());
+            exit;
+        }
     }
+}
+
+// 3. Handle AJAX add to cart
+add_filter('woocommerce_add_to_cart_fragments', 'intercept_ajax_add_to_cart');
+function intercept_ajax_add_to_cart($fragments) {
+    // This will make the AJAX add to cart redirect to checkout
+    $fragments['redirect_url'] = wc_get_checkout_url();
+    return $fragments;
+}
+
+// 4. Add JavaScript to handle all add to cart actions
+add_action('wp_footer', 'add_checkout_redirect_js', 999);
+function add_checkout_redirect_js() {
+    if (is_admin()) return;
+    
+    // Get the checkout URL with a random parameter to prevent caching
+    $checkout_url = add_query_arg('nocache', time(), wc_get_checkout_url());
+    ?>
+    <script type="text/javascript">
+    jQuery(document).ready(function($) {
+        // 1. Intercept all add to cart forms
+        $('body').on('submit', 'form.cart', function(e) {
+            e.preventDefault();
+            var $form = $(this);
+            var $button = $form.find('.single_add_to_cart_button');
+            
+            // Disable button to prevent multiple clicks
+            $button.prop('disabled', true).addClass('loading');
+            
+            // Submit the form via AJAX
+            $.ajax({
+                type: 'POST',
+                url: wc_add_to_cart_params.ajax_url,
+                data: $form.serialize() + '&action=woocommerce_add_to_cart',
+                success: function(response) {
+                    // Redirect to checkout on success
+                    window.location.href = '<?php echo esc_js($checkout_url); ?>';
+                },
+                error: function() {
+                    // If AJAX fails, submit the form normally
+                    $form.off('submit').submit();
+                }
+            });
+            
+            return false;
+        });
+        
+        // 2. Handle simple add to cart links
+        $('body').on('click', '.add_to_cart_button:not(.product_type_variable, .product_type_grouped, .product_type_external)', function(e) {
+            e.preventDefault();
+            var $button = $(this);
+            
+            // Skip if already processing
+            if ($button.hasClass('loading')) return false;
+            
+            // Get the product ID and URL
+            var product_id = $button.data('product_id');
+            var product_url = $button.attr('href');
+            
+            // Disable button
+            $button.addClass('loading');
+            
+            // Add to cart via AJAX
+            $.ajax({
+                type: 'POST',
+                url: wc_add_to_cart_params.ajax_url,
+                data: 'add-to-cart=' + product_id + '&action=woocommerce_add_to_cart',
+                success: function() {
+                    // Redirect to checkout
+                    window.location.href = '<?php echo esc_js($checkout_url); ?>';
+                },
+                error: function() {
+                    // If AJAX fails, redirect to the product URL
+                    window.location.href = product_url;
+                }
+            });
+            
+            return false;
+        });
+        
+        // 3. Handle AJAX add to cart events
+        $(document.body).on('added_to_cart', function() {
+            // Small delay to ensure cart is updated
+            setTimeout(function() {
+                window.location.href = '<?php echo esc_js($checkout_url); ?>';
+            }, 100);
+        });
+    });
+    </script>
+    <?php
 }
