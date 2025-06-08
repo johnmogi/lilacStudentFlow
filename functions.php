@@ -59,8 +59,10 @@ add_action('init', function() {
 add_action('wp_ajax_lilac_debug_log', 'lilac_handle_debug_log');
 add_action('wp_ajax_nopriv_lilac_debug_log', 'lilac_handle_debug_log');
 function lilac_handle_debug_log() {
-    if (isset($_POST['message'])) {
-        custom_log('JS Debug', sanitize_text_field($_POST['message']));
+    if (!empty($_POST['message'])) {
+        $log_file = WP_CONTENT_DIR . '/debug-lilac.log';
+        $message = '[' . current_time('mysql') . '] ' . sanitize_text_field($_POST['message']) . "\n";
+        error_log($message, 3, $log_file);
     }
     wp_die();
 }
@@ -454,15 +456,28 @@ if (!function_exists('write_log')) {
 remove_action('template_redirect', 'wc_redirect_to_checkout');
 remove_action('template_redirect', 'wc_cart_redirect_after_error');
 
-// Ensure WooCommerce session is started
+// Ensure WooCommerce session is started for all users
 add_action('wp_loaded', function() {
-    if (!is_admin() && !defined('DOING_CRON') && !defined('DOING_AJAX')) {
-        if (function_exists('WC') && !WC()->session->has_session()) {
+    if (!is_admin() && !defined('DOING_CRON') && !defined('DOING_AJAX') && function_exists('WC')) {
+        // Initialize session if not already started
+        if (is_null(WC()->session)) {
+            WC()->initialize_session();
+        }
+        // Ensure customer session cookie is set
+        if (WC()->session && !WC()->session->has_session()) {
             WC()->session->set_customer_session_cookie(true);
         }
     }
 });
-});
+
+// Ensure cart is initialized for all users
+add_action('wp_loaded', function() {
+    if (function_exists('WC') && !is_admin() && !defined('DOING_CRON') && !defined('DOING_AJAX')) {
+        if (is_null(WC()->cart)) {
+            WC()->initialize_cart();
+        }
+    }
+}, 5);
 
 // Handle AJAX logging
 add_action('wp_ajax_log_to_console', 'handle_console_log');
@@ -721,10 +736,19 @@ function hello_elementor_child_scripts_styles() {
             'is_shop' => is_shop() ? 'yes' : 'no',
             'is_product_category' => is_product_category() ? 'yes' : 'no',
             'home_url' => home_url('/'),
-            'wc_ajax_url' => WC_AJAX::get_endpoint('%%endpoint%%')
+            'wc_ajax_url' => WC_AJAX::get_endpoint('%%endpoint%%'),
+            'debug' => WP_DEBUG ? 'yes' : 'no',
+            'user_logged_in' => is_user_logged_in() ? 'yes' : 'no',
+            'wc_cart_url' => wc_get_cart_url(),
+            'nonce' => wp_create_nonce('woocommerce-cart')
         );
         
         wp_localize_script('lilac-add-to-cart', 'lilac_vars', $lilac_vars);
+        
+        // Log the debug info to PHP error log
+        if (WP_DEBUG) {
+            error_log('Lilac Debug - Enqueued Scripts: ' . print_r($lilac_vars, true));
+        }
         
         // Also make sure WooCommerce scripts have the right data
         wp_localize_script('wc-add-to-cart', 'wc_add_to_cart_params', array(
@@ -982,9 +1006,14 @@ function ccr_load_login_system() {
             
             // Check if the class exists and can be loaded
             if (class_exists('Lilac\Login\LoginManager')) {
-                error_log('LoginManager class exists, getting instance...');
-                $instance = Lilac\Login\LoginManager::get_instance();
-                error_log('LoginManager instance: ' . get_class($instance));
+                error_log('LoginManager class exists, initializing...');
+                // The init method will handle the initialization
+                $instance = Lilac\Login\LoginManager::init();
+                if ($instance) {
+                    error_log('LoginManager initialized successfully');
+                } else {
+                    error_log('WARNING: LoginManager::init() returned null');
+                }
             } else {
                 error_log('ERROR: Lilac\Login\LoginManager class not found!');
             }
@@ -1086,18 +1115,12 @@ add_action('after_setup_theme', 'load_registration_codes_system', 15);
 if (class_exists('WooCommerce')) {
     require_once get_stylesheet_directory() . '/includes/woocommerce/class-woocommerce-customizations.php';
 }
-}
 
-<?php
-// Exit if accessed directly
-if (!defined('ABSPATH')) {
-    exit;
-}
+
 
 // ============================================
 // WooCommerce Checkout Redirect Functionality
 // ============================================
-
 
 // 1. Change Add to Cart button text
 add_filter('woocommerce_product_single_add_to_cart_text', 'custom_add_to_cart_text');
@@ -1106,23 +1129,48 @@ function custom_add_to_cart_text() {
     return 'רכשו עכשיו';
 }
 
-// 2. Force redirect to checkout on any add-to-cart action
+// 2. Clear cart before adding new product and handle add to cart
+add_filter('woocommerce_add_to_cart_validation', 'clear_cart_before_adding', 10, 3);
+function clear_cart_before_adding($passed, $product_id, $quantity) {
+    // Debug log
+    error_log('Adding to cart - Product ID: ' . $product_id . ', Quantity: ' . $quantity);
+    
+    // Clear the cart before adding new item
+    if (!WC()->cart->is_empty()) {
+        WC()->cart->empty_cart();
+        error_log('Cart was not empty - Cleared cart before adding new item');
+    }
+    
+    return $passed;
+}
+
+// 3. Force redirect to checkout on any add-to-cart action
 add_action('template_redirect', 'force_checkout_redirect');
 function force_checkout_redirect() {
-    // Only proceed if we're on the cart page or processing add to cart
+    // Debug log
+    error_log('Force redirect check - is_cart: ' . (is_cart() ? 'yes' : 'no') . ', add-to-cart: ' . (isset($_REQUEST['add-to-cart']) ? $_REQUEST['add-to-cart'] : 'not set'));
+    
     if (is_cart() || (isset($_REQUEST['add-to-cart']) && is_numeric($_REQUEST['add-to-cart']))) {
-        // If cart is not empty, redirect to checkout
         if (!WC()->cart->is_empty()) {
+            error_log('Redirecting to checkout');
             wp_redirect(wc_get_checkout_url());
             exit;
+        } else {
+            error_log('Cannot redirect - Cart is empty');
         }
     }
 }
- 
-// 3. Handle AJAX add to cart
+
+// 3.1 Fix for AJAX add to cart
 add_filter('woocommerce_add_to_cart_fragments', 'intercept_ajax_add_to_cart');
 function intercept_ajax_add_to_cart($fragments) {
-    // This will make the AJAX add to cart redirect to checkout
+    error_log('AJAX add to cart intercepted');
+    if (!WC()->cart->is_empty()) {
+        wp_send_json(array(
+            'error' => false,
+            'redirect' => wc_get_checkout_url()
+        ));
+    }
     $fragments['redirect_url'] = wc_get_checkout_url();
     return $fragments;
 }

@@ -1,7 +1,23 @@
 jQuery(document).ready(function($) {
     'use strict';
     
-    console.log('Lilac Add to Cart script loaded');
+    // Debug function
+    function debugLog() {
+        if (window.console && window.console.log) {
+            var args = Array.prototype.slice.call(arguments);
+            args.unshift('[Lilac Debug]');
+            console.log.apply(console, args);
+        }
+    }
+    
+    debugLog('Lilac Add to Cart script loaded');
+    
+    // Check if WooCommerce AJAX is available
+    if (typeof wc_add_to_cart_params === 'undefined') {
+        debugLog('WooCommerce AJAX parameters not found. Some features may not work correctly.');
+    } else {
+        debugLog('WooCommerce AJAX URL:', wc_add_to_cart_params.ajax_url);
+    }
     
     // Debug function
     function debugLog() {
@@ -15,6 +31,18 @@ jQuery(document).ready(function($) {
         
         // Log to console
         console.log.apply(console, args);
+        
+        // Also log to server if debug is enabled
+        if (lilac_vars.debug === 'yes') {
+            $.ajax({
+                url: lilac_vars.ajax_url,
+                type: 'POST',
+                data: {
+                    action: 'lilac_debug_log',
+                    message: args.join(' ')
+                }
+            });
+        }
     }
     
     // Function to redirect to checkout
@@ -37,48 +65,50 @@ jQuery(document).ready(function($) {
         setTimeout(redirectToCheckout, 500);
     });
     
-    // Handle form submission for simple products
-    $(document).on('submit', 'form.cart:not(.grouped_form)', function(e) {
-        debugLog('=== FORM SUBMIT TRIGGERED ===');
-        var $form = $(this);
-        var $button = $form.find('.single_add_to_cart_button');
-        
-        // Always prevent default for our custom handling
+    // Handle add to cart button click
+    $(document).on('click', '.single_add_to_cart_button', function(e) {
         e.preventDefault();
-        e.stopImmediatePropagation();
         
-        // Disable the button to prevent multiple clicks
+        var $button = $(this);
+        var $form = $button.closest('form.cart');
+        
+        // Disable button to prevent multiple clicks
         $button.prop('disabled', true).addClass('loading');
         
-        debugLog('Form data:', $form.serialize());
+        // Get product ID from the form
+        var product_id = $form.find('input[name="add-to-cart"]').val() || 
+                        $button.val() ||
+                        $form.data('product_id');
+        
+        // Get quantity
+        var quantity = $form.find('input.qty').val() || 1;
+        
+        debugLog('Adding to cart - Product ID:', product_id, 'Quantity:', quantity);
         
         // Submit via AJAX
         $.ajax({
-            url: wc_add_to_cart_params.ajax_url,
             type: 'POST',
-            data: $form.serialize() + '&action=woocommerce_add_to_cart',
-            dataType: 'json',
+            url: wc_add_to_cart_params.ajax_url,
+            data: {
+                action: 'woocommerce_add_to_cart',
+                product_id: product_id,
+                quantity: quantity,
+                _wpnonce: $form.find('input[name="_wpnonce"]').val()
+            },
             success: function(response) {
-                debugLog('AJAX add to cart success:', response);
-                if (response.error && response.product_url) {
-                    window.location = response.product_url;
-                    return;
+                debugLog('Add to cart success:', response);
+                if (response.redirect) {
+                    window.location.href = response.redirect;
+                } else {
+                    window.location.href = wc_add_to_cart_params.cart_url;
                 }
-                // Redirect to checkout after successful add to cart
-                redirectToCheckout();
             },
             error: function(xhr, status, error) {
-                var errorMsg = 'שגיאה בהוספת המוצר לעגלה. אנא נסה שוב.';
-                try {
-                    var response = JSON.parse(xhr.responseText);
-                    if (response.error_message) {
-                        errorMsg = response.error_message;
-                    }
-                    debugLog('AJAX add to cart error:', response);
-                } catch (e) {
-                    debugLog('Error parsing error response:', e);
-                }
-                alert(errorMsg);
+                debugLog('Add to cart error:', status, error);
+                // Fallback to regular form submission
+                $form.off('submit').submit();
+            },
+            complete: function() {
                 $button.prop('disabled', false).removeClass('loading');
             }
         });

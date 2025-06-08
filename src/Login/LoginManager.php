@@ -617,13 +617,25 @@ class LoginManager {
             unset($_SESSION['lilac_login_debug_pw_error']);
             unset($_SESSION['lilac_login_debug_direct_phone_login']);
             unset($_SESSION['lilac_login_debug_users_count']);
-            unset($_SESSION['lilac_login_debug_alt_found']);
         }
+    }
+    
+    /**
+     * Initialize the plugin
+     * 
+     * @return LoginManager|null Instance of LoginManager or null if not available
+     */
+    public static function init() {
+        if (!is_admin() && !(defined('WP_CLI') && WP_CLI)) {
+            if (class_exists('Lilac\\Login\\LoginManager')) {
+                return self::get_instance();
+            }
+        }
+        return null;
     }
 }
 
-// Initialize the class
-function lilac_login_manager() {
-    return \Lilac\Login\LoginManager::get_instance();
+// Only add the action if we're not in admin
+if (!is_admin() && !(defined('WP_CLI') && WP_CLI)) {
+    add_action('init', ['Lilac\\Login\\LoginManager', 'init']);
 }
-add_action('init', 'lilac_login_manager');
