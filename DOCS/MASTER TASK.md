@@ -1,5 +1,12 @@
 
 
+
+THERE ARE 2 MAIN BUGS
+
+1 list of topics edit - i cannot bulk connect categories to topics ] course - it has to be done manualy - we need an upgrade
+
+
+
 relevant features:
 
 - mini cart checkout - remove items?
@@ -35,5 +42,8 @@ product 3990
 purchase
 
 thank you
+
+
+https://testli.local/checkout/order-received/
 
 wellcome access

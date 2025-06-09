@@ -1088,6 +1088,12 @@ add_filter( 'script_loader_src', 'remove_css_js_version_query', 9999 );
 // Load custom user functionality
 require_once get_stylesheet_directory() . '/includes/users/custom-user-redirects.php';
 
+// Load Learndash Dashboard Widget
+if (file_exists(get_stylesheet_directory() . '/inc/widgets/LearndashDashboard/LearndashDashboard.php')) {
+    require_once get_stylesheet_directory() . '/inc/widgets/LearndashDashboard/LearndashDashboard.php';
+    new \Windstorm\Widgets\LearndashDashboard();
+}
+
 // Load Registration Codes System
 function load_registration_codes_system() {
     // Include the main registration codes class
@@ -1114,6 +1120,91 @@ add_action('after_setup_theme', 'load_registration_codes_system', 15);
 // Load WooCommerce Customizations
 if (class_exists('WooCommerce')) {
     require_once get_stylesheet_directory() . '/includes/woocommerce/class-woocommerce-customizations.php';
+    require_once get_stylesheet_directory() . '/includes/admin/thank-you-page-settings.php';
+    
+    // Load Subscription Manager
+    require_once get_stylesheet_directory() . '/includes/class-lilac-subscription.php';
+    
+    // Enqueue subscription styles
+    add_action('wp_enqueue_scripts', function() {
+        if (!is_wc_endpoint_url('order-received')) {
+            return;
+        }
+        
+        $css = "
+        /* Subscription Box */
+        .lilac-subscription-box {
+            max-width: 600px;
+            margin: 40px auto;
+            padding: 25px;
+            background: #f8f9fa;
+            border: 1px solid #e0e0e0;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .lilac-subscription-box h3 {
+            margin-top: 0;
+            color: #333;
+            font-size: 1.2em;
+        }
+        .lilac-subscription-box p {
+            margin-bottom: 15px;
+            color: #666;
+        }
+        /* Toggle Switch */
+        #lilac-subscription-toggle {
+            width: 40px;
+            height: 20px;
+            position: relative;
+            -webkit-appearance: none;
+            background: #ddd;
+            border-radius: 20px;
+            outline: none;
+            transition: .4s;
+            cursor: pointer;
+            vertical-align: middle;
+            margin: 0 10px 0 0;
+        }
+        #lilac-subscription-toggle:checked {
+            background: #4CAF50;
+        }
+        #lilac-subscription-toggle:before {
+            content: '';
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            top: 2px;
+            left: 2px;
+            background: white;
+            transition: .4s;
+        }
+        #lilac-subscription-toggle:checked:before {
+            transform: translateX(20px);
+        }
+        /* Admin column */
+        .column-subscription {
+            text-align: center;
+            width: 80px;
+        }
+        .subscription-status {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            line-height: 20px;
+            text-align: center;
+            border-radius: 50%;
+            font-weight: bold;
+        }
+        .subscription-status.yes {
+            color: #4CAF50;
+        }
+        .subscription-status.no {
+            color: #ccc;
+        }";
+        
+        wp_add_inline_style('woocommerce-general', $css);
+    }, 20);
 }
 
 

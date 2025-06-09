@@ -304,8 +304,17 @@ function lilac_render_toast_container() {
 
 /**
  * Custom handler for wp_die to convert errors to toasts when appropriate
+ * 
+ * @param string|callable $handler The default handler
+ * @param string|WP_Error $message Optional. Error message or WP_Error object
+ * @param string          $title   Optional. Error title
+ * @return callable                The handler function
  */
-function lilac_custom_wp_die_handler($handler, $message, $title = '') {
+function lilac_custom_wp_die_handler($handler = null, $message = '', $title = '') {
+    // Handle case when called with only one argument (the handler)
+    if (func_num_args() === 1 && is_string($handler) && $handler === '_default_wp_die_handler') {
+        return $handler;
+    }
     // Only convert to toast for AJAX requests or if specifically requested
     if (wp_doing_ajax() || (isset($_REQUEST['toast_errors']) && $_REQUEST['toast_errors'])) {
         // Convert the error to a toast

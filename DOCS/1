@@ -1,0 +1,298 @@
+<div id="wpbody-content">
+		<div id="screen-meta" class="metabox-prefs">
+
+			<div id="contextual-help-wrap" class="hidden no-sidebar" tabindex="-1" aria-label="לשונית עזרה">
+				<div id="contextual-help-back"></div>
+				<div id="contextual-help-columns">
+					<div class="contextual-help-tabs">
+						<ul>
+												</ul>
+					</div>
+
+					
+					<div class="contextual-help-tabs-wrap">
+											</div>
+				</div>
+			</div>
+				</div>
+		
+<div class="wrap" dir="rtl">
+    <div class="llm-admin-notice-controls">
+        <button type="button" id="llm-toggle-notices" class="button button-secondary">
+            <span class="dashicons dashicons-visibility"></span>
+            <span class="llm-notice-text">הצג התראות</span>
+        </button>
+    </div>
+    <h1>Lilac Learning Manager</h1>
+    
+    <div class="llm-admin-header">
+        <div class="llm-admin-header-content">
+            <h2>ברוכים הבאים למנהל למידת לילך</h2>
+            <p class="about-description">
+                ניהול תוכניות למידה, קורסים ושאלות שלך מהלוח הבקרה
+            </p>
+        </div>
+    </div>
+    
+    <div class="llm-dashboard-widgets">
+        <div class="llm-dashboard-widget">
+            <h3>נתונים מהירים</h3>
+            <ul class="llm-stats-list">
+                                    <li>
+                        <a href="https://testli.local/wp-admin/edit-tags.php?taxonomy=llm_program&amp;post_type=sfwd-courses">
+                            <span class="dashicons dashicons-category"></span>
+                            4 תוכניות                        </a>
+                    </li>
+                                
+                                <li>
+                    <a href="https://testli.local/wp-admin/edit.php?post_type=sfwd-courses">
+                        <span class="dashicons dashicons-welcome-learn-more"></span>
+                        3 קורסים                    </a>
+                </li>
+                
+                                <li>
+                    <a href="https://testli.local/wp-admin/edit.php?post_type=sfwd-question">
+                        <span class="dashicons dashicons-editor-help"></span>
+                        65 שאלות                    </a>
+                </li>
+            </ul>
+        </div>
+        
+        <div class="llm-dashboard-widget">
+            <h3>פעילות אחרונה</h3>
+            <div class="llm-activity-feed">
+                <ul><li><span class="dashicons dashicons-editor-help"></span> שאלה: <a href="https://testli.local/wp-admin/post.php?post=4475&amp;action=edit">האם מותר לנהוג לאחר ערבוב סוגי משקאות אלכוהוליים?</a></li><li><span class="dashicons dashicons-editor-help"></span> שאלה: <a href="https://testli.local/wp-admin/post.php?post=4473&amp;action=edit">מהו ‘מרחק תגובה’?</a></li><li><span class="dashicons dashicons-editor-help"></span> שאלה: <a href="https://testli.local/wp-admin/post.php?post=4471&amp;action=edit">האם תרופות שניתן לקנות ללא מרשם רופא עלולות להשפיע לרעה על הנהיגה?</a></li><li><span class="dashicons dashicons-editor-help"></span> שאלה: <a href="https://testli.local/wp-admin/post.php?post=4469&amp;action=edit">באיזה אופן צריך רוכב אופנוע לעקוף כלי רכב אחר?</a></li><li><span class="dashicons dashicons-editor-help"></span> שאלה: <a href="https://testli.local/wp-admin/post.php?post=4467&amp;action=edit">איזה מן המשפטים שלפניך אינו נכון?</a></li></ul>            </div>
+        </div>
+    </div>
+    
+    <div class="llm-dashboard-footer">
+        <p>
+            Lilac Learning Manager version 1.0.0        </p>
+    </div>
+</div>
+
+<style>
+/* Notice toggle button */
+#llm-notice-toggle-wrap {
+    position: fixed;
+    top: 32px;
+    right: 20px;
+    z-index: 99999;
+}
+
+#llm-toggle-notices {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    text-decoration: none;
+    padding: 0 12px;
+    height: 30px;
+    line-height: 28px;
+    border-radius: 4px;
+    background: #f0f0f1;
+    border: 1px solid #dcdcde;
+    color: #1d2327;
+    font-size: 13px;
+    transition: all 0.2s ease;
+}
+
+#llm-toggle-notices:hover {
+    background: #f6f7f7;
+    border-color: #c3c4c7;
+    color: #1d2327;
+}
+
+#llm-toggle-notices .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+}
+
+/* RTL support */
+[dir="rtl"] #llm-notice-toggle-wrap {
+    right: auto;
+    left: 20px;
+}
+
+/* Hide notices when toggled */
+.notice-hidden .notice:not(.llm-notice),
+.notice-hidden #wpbody-content > .notice:not(.llm-notice),
+.notice-hidden .wrap > .notice:not(.llm-notice),
+.notice-hidden #wpbody-content > .updated,
+.notice-hidden #wpbody-content > .error,
+.notice-hidden #wpbody-content > .update-nag,
+.notice-hidden #wpbody-content > .updated,
+.notice-hidden #wpbody-content > .notice-error,
+.notice-hidden #wpbody-content > .notice-warning,
+.notice-hidden #wpbody-content > .notice-success,
+.notice-hidden #wpbody-content > .notice-info {
+    display: none !important;
+}
+
+/* Fix for admin bar position when notices are hidden */
+.notice-hidden #wpcontent, 
+.notice-hidden #wpfooter {
+    margin-top: 0 !important;
+}
+
+/* Ensure this applies to all admin pages */
+#wpbody-content > .notice,
+.wrap > .notice,
+#wpfooter + .notice,
+.update-nag,
+.updated,
+.error,
+.notice {
+    transition: opacity 0.3s ease;
+}
+</style>
+
+<script>
+// Wrap everything in a self-executing function to avoid global scope pollution
+(function($) {
+    'use strict';
+    
+    // Function to hide all notices
+    function hideNotices() {
+        $('body').addClass('notice-hidden');
+        
+        // Target only specific notice containers
+        var noticeContainers = [
+            '#wpbody-content > .notice',
+            '#wpbody-content > .update-nag',
+            '#wpbody-content > .updated',
+            '#wpbody-content > .error',
+            '.wrap > .notice',
+            '.wrap > .update-nag',
+            '.wrap > .updated',
+            '.wrap > .error',
+            '.e-notice',
+            '.e-notice--dismissible',
+            '.e-notice--extended'
+        ];
+        
+        // Hide each notice container
+        $(noticeContainers.join(',')).not('.llm-notice').hide();
+    }
+    
+    // Function to show all notices
+    function showNotices() {
+        $('body').removeClass('notice-hidden');
+        
+        // Show all notice containers
+        var noticeContainers = [
+            '#wpbody-content > .notice',
+            '#wpbody-content > .update-nag',
+            '#wpbody-content > .updated',
+            '#wpbody-content > .error',
+            '.wrap > .notice',
+            '.wrap > .update-nag',
+            '.wrap > .updated',
+            '.wrap > .error',
+            '.e-notice',
+            '.e-notice--dismissible',
+            '.e-notice--extended'
+        ];
+        
+        $(noticeContainers.join(',')).not('.llm-notice').show();
+    }
+    
+    // Make the function globally available but safe
+    window.llmToggleNotices = function(show) {
+        var $toggleButton = $('.llm-toggle-notice-btn, #llm-toggle-notices');
+        
+        if (show) {
+            showNotices();
+            $toggleButton.find('.llm-notice-text').text('הסתר התראות');
+            $toggleButton.find('.dashicons')
+                .removeClass('dashicons-visibility')
+                .addClass('dashicons-hidden');
+        } else {
+            hideNotices();
+            $toggleButton.find('.llm-notice-text').text('הצג התראות');
+            $toggleButton.find('.dashicons')
+                .removeClass('dashicons-hidden')
+                .addClass('dashicons-visibility');
+        }
+        
+        // Save preference
+        try {
+            localStorage.setItem('llm_notices_hidden', !show);
+            // Also save to user meta for server-side use
+            if (typeof ajaxurl !== 'undefined') {
+                $.post(ajaxurl, {
+                    action: 'llm_save_notice_preference',
+                    hide: show ? 0 : 1,
+                    nonce: (window.llmNotices && window.llmNotices.nonce) ? window.llmNotices.nonce : ''
+                });
+            }
+        } catch (e) {
+            console.error('Failed to save notice preference:', e);
+        }
+    };
+
+    // Initialize the notice toggle
+    function initNoticeToggle() {
+        // Set default state to hidden if not set
+        if (localStorage.getItem('llm_notices_hidden') === null) {
+            try {
+                localStorage.setItem('llm_notices_hidden', 'true');
+            } catch (e) {
+                console.error('Failed to set default notice preference:', e);
+            }
+        }
+        
+        // Check if notices should be hidden
+        var noticesHidden = localStorage.getItem('llm_notices_hidden') === 'true';
+        
+        // Set initial state (hidden by default)
+        if (typeof window.llmToggleNotices === 'function') {
+            // Use setTimeout to ensure the DOM is fully loaded
+            setTimeout(function() {
+                window.llmToggleNotices(!noticesHidden);
+            }, 100);
+        }
+        
+        // Toggle notices on button click
+        $(document).on('click', '.llm-toggle-notice-btn, #llm-toggle-notices', function(e) {
+            e.preventDefault();
+            if (typeof window.llmToggleNotices === 'function') {
+                window.llmToggleNotices($('body').hasClass('notice-hidden'));
+            }
+        });
+    }
+
+    // Initialize when document is ready
+    $(document).ready(function() {
+        // Initialize the toggle
+        initNoticeToggle();
+        
+        // Handle dynamically added notices
+        $(document).ajaxComplete(function() {
+            if ($('body').hasClass('notice-hidden')) {
+                hideNotices();
+            }
+        });
+    });
+
+    // Make sure it works with the WordPress heartbeat API
+    $(document).on('heartbeat-tick', function() {
+        if ($('body').hasClass('notice-hidden')) {
+            hideNotices();
+        }
+    });
+
+})(jQuery);
+</script>
+
+<div class="clear"></div></div>
+
+w.js:1 
+            
+            
+           Failed to load resource: net::ERR_BLOCKED_BY_CLIENT
+load-scripts.php?c=0&load%5Bchunk_0%5D=wp-hooks,jquery-core,jquery-migrate,utils&ver=6.8.1:7 JQMIGRATE: Migrate is installed, version 3.4.1
+/wp-admin/admin-ajax.php:1 
+            
+            
+           Failed to load resource: the server responded with a status of 400 ()
