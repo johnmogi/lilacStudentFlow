@@ -478,6 +478,16 @@ class Lilac_Thank_You_Page_Settings {
     }
     
     /**
+     * Get product to course mappings
+     * 
+     * @return array Array of product to course mappings
+     */
+    private function get_product_mappings() {
+        $mappings = get_option('lilac_product_course_mappings', []);
+        return is_array($mappings) ? $mappings : [];
+    }
+    
+    /**
      * Get course ID associated with a product
      */
     private function get_course_id_for_product($product_id) {

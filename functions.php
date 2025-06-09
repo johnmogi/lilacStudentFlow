@@ -681,6 +681,88 @@ add_action('template_redirect', function() {
  * Enqueue scripts and styles
  */
 function hello_elementor_child_scripts_styles() {
+    // Make sure cart fragments script is loaded
+    if (function_exists('is_checkout') && is_checkout()) {
+        wp_enqueue_script('wc-cart-fragments');
+        
+        // Enqueue our custom checkout script
+        wp_enqueue_script(
+            'lilac-checkout-script',
+            get_stylesheet_directory_uri() . '/js/checkout.js',
+            array('jquery', 'wc-cart-fragments'),
+            filemtime(get_stylesheet_directory() . '/js/checkout.js'),
+            true
+        );
+        
+        // Add debug information
+        add_action('wp_footer', function() {
+            echo '<!-- LILAC CHECKOUT SCRIPT LOADED -->';
+        }, 5);
+    }
+    // Enqueue checkout scripts
+    if (function_exists('is_checkout') && is_checkout()) {
+        error_log('Loading checkout scripts');
+        
+        // Debug script that will log when it loads
+        wp_add_inline_script('jquery', '
+            console.log("jQuery loaded");
+            jQuery(document).ready(function($) {
+                console.log("Document ready");
+                console.log("Checkout params:", ' . json_encode([
+                    'is_checkout' => is_checkout(),
+                    'cart_contents' => WC()->cart ? WC()->cart->get_cart_contents_count() : 0,
+                ]) . ');
+            });
+        ');
+        
+        // Enqueue our checkout script with dependency on jquery and wc-cart-fragments
+        wp_enqueue_script(
+            'hello-theme-child-checkout',
+            get_stylesheet_directory_uri() . '/js/checkout.js',
+            array('jquery', 'wc-cart-fragments'),
+            filemtime(get_stylesheet_directory() . '/js/checkout.js'),
+            true
+        );
+        
+        // Debug script to check if our script is loaded
+        wp_add_inline_script('hello-theme-child-checkout', '
+            console.log("Checkout script loaded");
+        ');
+        
+        // Localize script with checkout URL and nonce
+        wp_localize_script('hello-theme-child-checkout', 'lilac_checkout_params', array(
+            'ajax_url' => admin_url('admin-ajax.php'),
+            'wc_ajax_url' => class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('%%endpoint%%') : '',
+            'nonce' => wp_create_nonce('lilac-checkout-nonce')
+        ));
+        
+        // Add debug styles directly in the head
+        add_action('wp_head', function() {
+            echo '<style id="lilac-debug-styles">
+                .product-name-wrapper { position: relative !important; }
+                .remove_from_order_review { 
+                    display: inline-block !important; 
+                    color: red !important; 
+                    font-weight: bold !important;
+                    margin-right: 10px !important;
+                }
+            </style>';
+        }, 999);
+        
+        wp_enqueue_script(
+            'hello-theme-child-checkout',
+            get_stylesheet_directory_uri() . '/js/checkout.js',
+            array('jquery', 'wc-cart-fragments'),
+            filemtime(get_stylesheet_directory() . '/js/checkout.js'),
+            true
+        );
+        
+        // Localize script with checkout URL
+        wp_localize_script('hello-theme-child-checkout', 'lilac_checkout_params', array(
+            'ajax_url' => admin_url('admin-ajax.php'),
+            'wc_ajax_url' => WC_AJAX::get_endpoint('%%endpoint%%')
+        ));
+    }
     // Enqueue parent theme styles
     wp_enqueue_style(
         'hello-elementor-child-style',
@@ -822,6 +904,228 @@ function hello_elementor_child_scripts_styles() {
     }
 }
 add_action('wp_enqueue_scripts', 'hello_elementor_child_scripts_styles', 20);
+
+// Add custom CSS for mini-cart remove button
+function custom_mini_cart_styles() {
+    if (function_exists('is_checkout') && is_checkout()) {
+        ?>
+        <style type="text/css">
+            .woocommerce-mini-cart .remove_from_cart_button {
+                position: absolute;
+                right: 10px;
+                top: 10px;
+                color: #a00 !important;
+                font-size: 1.5em;
+                line-height: 1;
+                text-decoration: none;
+                opacity: 0.7;
+                transition: opacity 0.3s;
+            }
+            .woocommerce-mini-cart .remove_from_cart_button:hover {
+                opacity: 1;
+                color: #f00 !important;
+            }
+            .woocommerce-mini-cart .remove_from_cart_button.loading {
+                opacity: 0.5;
+                pointer-events: none;
+            }
+            .woocommerce-mini-cart .remove_from_cart_button.loading:after {
+                content: '\e011';
+                font-family: 'WooCommerce';
+                display: inline-block;
+                -webkit-animation: spin 2s linear infinite;
+                -moz-animation: spin 2s linear infinite;
+                animation: spin 2s linear infinite;
+            }
+            /* RTL support */
+            .rtl .woocommerce-mini-cart .remove_from_cart_button {
+                right: auto;
+                left: 10px;
+            }
+        </style>
+        <?php
+    }
+}
+add_action('wp_head', 'custom_mini_cart_styles');
+
+/**
+ * Add remove button to order review items
+ */
+function add_remove_button_to_order_review_items($product_name, $cart_item, $cart_item_key) {
+    // Debug log
+    error_log('add_remove_button_to_order_review_items called');
+    error_log('is_checkout: ' . (is_checkout() ? 'true' : 'false'));
+    
+    if (is_checkout()) {
+        $remove_link = sprintf(
+            '<a href="%s" class="remove remove_from_order_review" data-product_id="%s" data-cart_item_key="%s" data-product_sku="%s">%s</a>',
+            esc_url(wc_get_cart_remove_url($cart_item_key)),
+            esc_attr($cart_item['product_id']),
+            esc_attr($cart_item_key),
+            esc_attr($cart_item['data']->get_sku()),
+            '&times;'
+        );
+        $product_name = '<span class="product-name-wrapper">' . $product_name . $remove_link . '</span>';
+    }
+    
+    // Debug log the output
+    error_log('Product name output: ' . substr($product_name, 0, 100) . '...');
+    return $product_name;
+}
+// Add our filter with high priority to ensure it runs after other filters
+add_filter('woocommerce_cart_item_name', 'add_remove_button_to_order_review_items', 9999, 3);
+
+// Debug function to check all filters on woocommerce_cart_item_name
+function debug_cart_item_name_filters() {
+    global $wp_filter;
+    if (isset($wp_filter['woocommerce_cart_item_name'])) {
+        echo '<script>console.log("woocommerce_cart_item_name filters:", ' . json_encode(array_keys($wp_filter['woocommerce_cart_item_name']->callbacks)) . ');</script>';
+    }
+}
+add_action('wp_footer', 'debug_cart_item_name_filters', 9999);
+
+/**
+ * Add remove buttons directly to the order review table via JavaScript
+ */
+// Add our script directly to the footer with high priority
+add_action('wp_footer', function() {
+    if (!is_checkout()) return;
+    
+    // Add a very visible test button
+    echo '<div id="lilac-test-button" style="position: fixed; top: 100px; left: 20px; z-index: 9999; background: #ff0000; color: white; padding: 15px; font-size: 18px; font-weight: bold; border-radius: 5px; cursor: pointer; box-shadow: 0 0 10px rgba(0,0,0,0.5);">LILAC TEST BUTTON</div>';
+    
+    // Add our script directly
+    ?>
+    <script type="text/javascript">
+    console.log('LILAC DIRECT SCRIPT LOADED');
+    
+    // Simple test to see if jQuery is available
+    if (typeof jQuery !== 'undefined') {
+        console.log('jQuery is loaded, version:', jQuery.fn.jquery);
+        
+        jQuery(document).ready(function($) {
+            console.log('jQuery document ready fired in direct script');
+            
+            // Make the test button flash and show an alert when clicked
+            var $button = $('#lilac-test-button');
+            setInterval(function() {
+                $button.fadeOut(500).fadeIn(500);
+            }, 2000);
+            
+            $button.on('click', function() {
+                alert('LILAC TEST BUTTON CLICKED!');
+                console.log('Test button clicked!');
+            });
+            
+            // Try to add remove buttons
+            function addRemoveButtons() {
+                console.log('Trying to add remove buttons...');
+                
+                $('.woocommerce-checkout-review-order-table tbody tr.cart_item').each(function() {
+                    var $row = $(this);
+                    if ($row.find('.lilac-remove-btn').length === 0) {
+                        console.log('Adding remove button to row');
+                        $row.find('td.product-name').append(
+                            ' <a href="#" class="lilac-remove-btn" style="color: red; margin-right: 10px;">×</a>'
+                        );
+                    }
+                });
+            }
+            
+            // Run immediately
+            addRemoveButtons();
+            
+            // Also run after any AJAX updates
+            $(document.body).on('updated_checkout', function() {
+                console.log('Checkout updated, re-adding remove buttons...');
+                setTimeout(addRemoveButtons, 1000);
+            });
+            
+            // Handle remove button click
+            $(document).on('click', '.lilac-remove-btn', function(e) {
+                e.preventDefault();
+                console.log('Remove button clicked');
+                
+                var $button = $(this);
+                $button.text('...');
+                
+                // Find the product ID from the row
+                var $row = $button.closest('tr');
+                var productName = $row.find('td.product-name').text().trim();
+                console.log('Trying to remove product:', productName);
+                
+                // Simple confirmation
+                if (confirm('האם אתה בטוח שברצונך להסיר מוצר זה?')) {
+                    // Just show a message for now
+                    alert('Remove functionality will be implemented here');
+                }
+                
+                $button.text('×');
+            });
+        });
+    } else {
+        console.error('jQuery is not loaded!');
+    }
+    </script>
+    <?php
+}, 5); // Priority 5 to run early
+
+// Add custom styles for the remove button in order review
+function custom_order_review_styles() {
+    if (is_checkout()) {
+        ?>
+        <style type="text/css">
+            .woocommerce-checkout-review-order-table .product-name {
+                position: relative;
+                padding-right: 25px;
+            }
+            .woocommerce-checkout-review-order-table .remove_from_order_review {
+                position: absolute;
+                right: 0;
+                top: 50%;
+                transform: translateY(-50%);
+                color: #a00 !important;
+                font-size: 1.5em;
+                line-height: 1;
+                text-decoration: none;
+                opacity: 0.7;
+                transition: opacity 0.3s;
+                width: 20px;
+                height: 20px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+            }
+            .woocommerce-checkout-review-order-table .remove_from_order_review:hover {
+                opacity: 1;
+                color: #f00 !important;
+            }
+            .woocommerce-checkout-review-order-table .remove_from_order_review.loading {
+                opacity: 0.5;
+                pointer-events: none;
+            }
+            .woocommerce-checkout-review-order-table .remove_from_order_review.loading:after {
+                content: '\e011';
+                font-family: 'WooCommerce';
+                display: inline-block;
+                -webkit-animation: spin 2s linear infinite;
+                -moz-animation: spin 2s linear infinite;
+                animation: spin 2s linear infinite;
+            }
+            /* RTL support */
+            .rtl .woocommerce-checkout-review-order-table .product-name {
+                padding-right: 0;
+                padding-left: 25px;
+            }
+            .rtl .woocommerce-checkout-review-order-table .remove_from_order_review {
+                right: auto;
+                left: 0;
+            }
+        </style>
+        <?php
+    }
+}
+add_action('wp_head', 'custom_order_review_styles');
 
 /**
  * Enqueue progress bar styles

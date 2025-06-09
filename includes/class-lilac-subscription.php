@@ -109,22 +109,91 @@ class Lilac_Subscription {
         }
 
         $order_id = $order->get_id();
+        
+        // Add visible debug box
+        echo '<div style="margin: 20px; padding: 20px; border: 2px solid #ff6b6b; background: #fff; color: #333;">';
+        echo '<h3>Debug Information</h3>';
+        
+        echo '<p><strong>Order ID:</strong> ' . $order_id . '</p>';
+        
+        // Get all products in the order
+        $items = $order->get_items();
+        echo '<p><strong>Order contains:</strong> ' . count($items) . ' items</p>';
+        
+        echo '<h4>Products in Order:</h4><ul>';
+        // Debug each product in the order
+        foreach ($items as $item) {
+            $product_id = $item->get_product_id();
+            echo '<li><strong>Product ID:</strong> ' . $product_id . ', <strong>Name:</strong> ' . esc_html($item->get_name()) . '<br>';
+            
+            // Check specific meta keys
+            echo '<strong>_related_course:</strong> ' . esc_html(get_post_meta($product_id, '_related_course', true)) . '<br>';
+            echo '<strong>_related_course_id:</strong> ' . esc_html(get_post_meta($product_id, '_related_course_id', true)) . '<br>';
+            echo '<strong>_lilac_related_course:</strong> ' . esc_html(get_post_meta($product_id, '_lilac_related_course', true)) . '<br>';
+            echo '<strong>_wc_course_id:</strong> ' . esc_html(get_post_meta($product_id, '_wc_course_id', true)) . '</li>';
+        }
+        echo '</ul>';
+        
         $courses = $this->get_courses_from_order($order);
         
-        if (empty($courses)) {
-            return; // No courses in this order
+        echo '<h4>Detected Courses:</h4>';
+        if (!empty($courses)) {
+            echo '<ul>';
+            foreach ($courses as $course_id) {
+                $course_id = intval($course_id);
+                if ($course_id <= 0) {
+                    echo '<li>Invalid course ID: ' . $course_id . '</li>';
+                    continue;
+                }
+                
+                $requires_manual_activation = get_post_meta($course_id, '_lilac_requires_manual_activation', true) === 'yes';
+                echo '<li><strong>Course ID:</strong> ' . $course_id . 
+                     ', <strong>Title:</strong> ' . esc_html(get_the_title($course_id)) . 
+                     ', <strong>Requires manual activation:</strong> ' . ($requires_manual_activation ? 'Yes' : 'No') . 
+                     ', <strong>Raw meta value:</strong> "' . esc_html(get_post_meta($course_id, '_lilac_requires_manual_activation', true)) . '"</li>';
+            }
+            echo '</ul>';
+        } else {
+            echo '<p>No courses found in this order</p>';
         }
+        
+        echo '<h4>Manually Setting Course Meta</h4>';
+        echo '<p>Setting <code>_lilac_requires_manual_activation</code> to "yes" for course ID 898...</p>';
+        update_post_meta(898, '_lilac_requires_manual_activation', 'yes');
+        echo '<p>Current value: "' . esc_html(get_post_meta(898, '_lilac_requires_manual_activation', true)) . '"</p>';
+        
+        echo '</div>';
         
         // Get subscription status for each course
         $course_data = [];
+        $has_manual_activation_courses = false;
+        
         foreach ($courses as $course_id) {
+            // Make sure course_id is a valid integer
+            $course_id = intval($course_id);
+            if ($course_id <= 0) {
+                continue;
+            }
+            
+            // Check if this course requires manual activation
+            $requires_manual_activation = get_post_meta($course_id, '_lilac_requires_manual_activation', true) === 'yes';
+            
+            // Include all courses for now to debug
             $course_data[$course_id] = [
                 'title' => get_the_title($course_id),
                 'is_subscribed' => $this->has_active_subscription($order_id, $course_id),
                 'expiry_date' => $this->get_subscription_expiry($order_id, $course_id),
-                'can_toggle' => $this->can_toggle_subscription($course_id)
+                'can_toggle' => $this->can_toggle_subscription($course_id),
+                'requires_manual_activation' => $requires_manual_activation
             ];
+            
+            if ($requires_manual_activation) {
+                $has_manual_activation_courses = true;
+            }
         }
+        
+        // Always show the box for debugging
+        $has_manual_activation_courses = true;
         
         ?>
         <div class="lilac-subscription-box">
@@ -409,14 +478,43 @@ class Lilac_Subscription {
         
         foreach ($order->get_items() as $item) {
             $product_id = $item->get_product_id();
-            $linked_course = get_post_meta($product_id, '_related_course', true);
             
+            // Check all possible ways courses might be linked to products
+            
+            // Standard LearnDash integration
+            $linked_course = get_post_meta($product_id, '_related_course', true);
             if ($linked_course) {
                 $courses[] = $linked_course;
             }
+            
+            // Multiple courses (comma-separated)
+            $ld_courses = get_post_meta($product_id, '_related_course_id', true);
+            if (!empty($ld_courses)) {
+                if (is_array($ld_courses)) {
+                    $courses = array_merge($courses, $ld_courses);
+                } else if (is_string($ld_courses) && strpos($ld_courses, ',') !== false) {
+                    $course_ids = explode(',', $ld_courses);
+                    $courses = array_merge($courses, $course_ids);
+                } else {
+                    $courses[] = $ld_courses;
+                }
+            }
+            
+            // Custom Lilac integration
+            $custom_course_id = get_post_meta($product_id, '_lilac_related_course', true);
+            if ($custom_course_id) {
+                $courses[] = $custom_course_id;
+            }
+            
+            // WooCommerce product course data (from our plugin)
+            $wc_course_id = get_post_meta($product_id, '_wc_course_id', true);
+            if ($wc_course_id) {
+                $courses[] = $wc_course_id;
+            }
         }
         
-        return array_filter($courses);
+        // Filter out empty values and ensure unique course IDs
+        return array_unique(array_filter(array_map('intval', $courses)));
     }
     
     /**
