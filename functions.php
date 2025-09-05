@@ -845,6 +845,9 @@ require_once get_stylesheet_directory() . '/inc/shortcodes/loader.php';
 // Load Quiz Follow-up System
 require_once get_stylesheet_directory() . '/includes/messaging/class-quiz-followup.php';
 
+// Load Subscription Activation System
+require_once get_stylesheet_directory() . '/includes/subscription-activation.php';
+
 // Load Ultimate Member integration if UM is active
 function ccr_load_um_integration() {
     if (class_exists('UM')) {
@@ -1037,12 +1040,6 @@ function ccr_load_login_system() {
 }
 add_action('after_setup_theme', 'ccr_load_login_system', 10);
 
-// Debug function to check registered shortcodes
-function debug_registered_shortcodes() {
-    global $shortcode_tags;
-    error_log('Registered Shortcodes: ' . print_r(array_keys($shortcode_tags), true));
-}
-add_action('init', 'debug_registered_shortcodes', 999);
 
 // Add body class for quiz types
 add_filter('body_class', function($classes) {
