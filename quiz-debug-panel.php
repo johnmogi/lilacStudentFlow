@@ -1,16 +1,13 @@
 <?php
 /**
- * Quiz Debug Panel
+ * Quiz Debug Panel - DISABLED
  * 
- * Creates a visual panel that shows all quiz data including:
- * - Question IDs
- * - Question content
- * - Correct answers
- * - Database tables and query results
+ * This debug panel was causing unwanted black footer debuggers
+ * Disabled to clean up the interface
  */
 
-// Add the debug panel to the quiz page
-add_action('wp_footer', 'lilac_quiz_debug_panel');
+// DISABLED - Causing unwanted debug output
+// add_action('wp_footer', 'lilac_quiz_debug_panel');
 
 function lilac_quiz_debug_panel() {
     if (!is_singular('sfwd-quiz')) {
